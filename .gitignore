@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+*.tgz
+*.log
+.env
+.env.*
+.DS_Store
+
+# Local installation and interactive validation notes.
+/VERIFICATION.md
