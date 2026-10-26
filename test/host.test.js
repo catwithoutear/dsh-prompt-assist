@@ -5,26 +5,36 @@ import { PromptAssist } from '../src/index.js';
 import { initialState } from '../src/core.js';
 import { createPreviewController } from '../src/preview-state.js';
 
-function setup(stream) {
+function setup(stream, config = {}, extras = {}) {
   const ctx = new Context();
   const state = { ...initialState(), eligible: true, endSeq: 9,
     recent: [{ role: 'user', text: '帮我写测试' }, { role: 'assistant', text: '测试已经写好' }] };
   const agent = { id: 'session-test', status: 'idle', inbox: { nextTurn: [], nextStep: [] }, session: { id: 'session-test' } };
   const selection = { next: { provider: 'chosen-provider', model: 'chosen-model' } };
   const calls = [];
+  const modelCalls = [];
   ctx.provide('agents', { get: id => id === agent.id ? agent : undefined });
   ctx.provide('sessionProjections', { stateOf: (_session, key) => key === 'localPromptAssist' ? state : selection });
+  ctx.provide('skills', extras.skills ?? { get: async () => ({ content: 'SKILL BODY' }) });
+  ctx.provide('workingDirectory', { ensure: async () => '/tmp' });
   ctx.provide('llm', {
-    resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'low' }] } }),
+    resolveModelInfo: extras.resolveModelInfo ?? (async () => ({ reasoning: { efforts: [{ id: 'low' }] } })),
     stream(options) { calls.push(options); return stream(options); },
+    listProviders: extras.listProviders ?? (() => []),
+    listModels: extras.listModels ?? (async () => []),
+    listModelsCalls: modelCalls,
   });
-  const service = new PromptAssist(ctx);
-  return { ctx, state, agent, calls, service };
+  const service = new PromptAssist(ctx, config);
+  return { ctx, state, agent, calls, service, modelCalls };
 }
 async function* answer() {
   yield { type: 'text-delta', text: '请帮我运行这些测试。' };
   yield { type: 'finish', reason: { kind: 'stop' } };
 }
+const streamOf = (...texts) => async function* () {
+  for (const text of texts) yield { type: 'text-delta', text };
+  yield { type: 'finish', reason: { kind: 'stop' } };
+};
 test('composer controller restores the real Host candidate without another model call', { timeout: 2000 }, async () => {
   const f = setup(answer);
   const c = createPreviewController({ delay: 0, predict: async (request, signal) => ({
@@ -132,4 +142,122 @@ test('a canceled cache entry does not prevent generation after the user clears t
     assert.deepEqual(await f.service.predict(request), restored);
     assert.equal(f.calls.length, 2, 'one canceled attempt, one successful attempt, then cache reuse');
   } finally { controller.abort(); await f.ctx.fiber.dispose(); }
+});
+
+test('continuation uses the configured auxiliary route and sends only draft fragments', async () => {
+  const f = setup(streamOf('并补一个回归测试。'), { provider: 'aux-provider', model: 'aux-model' });
+  try {
+    const result = await f.service.continueDraft({ sessionId: f.agent.id, endSeq: 9, prefix: '请检查这个修复', suffix: '' });
+    assert.deepEqual(result, { status: 'ready', reason: 'none', text: '并补一个回归测试。' });
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].provider, 'aux-provider');
+    assert.equal(f.calls[0].model, 'aux-model');
+    assert.equal(f.calls[0].maxTokens, 256);
+    assert.deepEqual(f.calls[0].tools, []);
+    const payload = JSON.parse(f.calls[0].messages[0].content[0].text);
+    assert.equal(payload.prefix, '请检查这个修复');
+    assert.equal(payload.suffix, '');
+    assert.deepEqual(payload.transcript.map(row => row.role), ['user', 'assistant']);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('continuation refuses a running turn, a mismatched cursor and oversized output', async () => {
+  const running = setup(streamOf('不应生成。'));
+  try {
+    running.agent.status = 'running';
+    assert.equal((await running.service.continueDraft({ sessionId: running.agent.id, endSeq: 9, prefix: 'a', suffix: '' })).status, 'stale');
+    assert.equal(running.calls.length, 0);
+  } finally { await running.ctx.fiber.dispose(); }
+  const mismatch = setup(streamOf('不应生成。'));
+  try {
+    assert.equal((await mismatch.service.continueDraft({ sessionId: mismatch.agent.id, endSeq: 8, prefix: 'a', suffix: '' })).status, 'stale');
+  } finally { await mismatch.ctx.fiber.dispose(); }
+  const long = setup(streamOf('长'.repeat(450)));
+  try {
+    const result = await long.service.continueDraft({ sessionId: long.agent.id, endSeq: 9, prefix: 'a', suffix: '' });
+    assert.equal(result.status, 'error');
+    assert.equal(result.reason, 'limit');
+  } finally { await long.ctx.fiber.dispose(); }
+});
+
+test('optimize reads the clarify skill and parses the MODE protocol', async () => {
+  const replace = setup(streamOf('MODE: replace\n\n请补充一个最小复现。'));
+  try {
+    const result = await replace.service.optimize({ sessionId: replace.agent.id, endSeq: 9,
+      text: '帮我修一下', before: '上下文', after: '' });
+    assert.deepEqual(result, { status: 'ready', reason: 'none', mode: 'replace', text: '请补充一个最小复现。' });
+    assert.equal(replace.calls[0].maxTokens, 8192);
+    assert.match(replace.calls[0].system, /SKILL BODY/);
+    assert.match(replace.calls[0].system, /MODE: replace/);
+    const payload = JSON.parse(replace.calls[0].messages[0].content[0].text);
+    assert.equal(payload.selection, '帮我修一下');
+    assert.equal(payload.contextBefore, '上下文');
+  } finally { await replace.ctx.fiber.dispose(); }
+  const questions = setup(streamOf('MODE: questions\n\n1. 目标平台？\n2. 是否兼容旧版本？'));
+  try {
+    const result = await questions.service.optimize({ sessionId: questions.agent.id, endSeq: 9,
+      text: '优化我', before: '', after: '' });
+    assert.equal(result.status, 'ready');
+    assert.equal(result.mode, 'questions');
+  } finally { await questions.ctx.fiber.dispose(); }
+});
+
+test('optimize reports a missing skill and an invalid model output', async () => {
+  const missing = setup(streamOf('MODE: replace\n\n不应到达'), {}, { skills: { get: async () => undefined } });
+  try {
+    const result = await missing.service.optimize({ sessionId: missing.agent.id, endSeq: 9,
+      text: '优化我', before: '', after: '' });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.reason, 'skill-unavailable');
+    assert.equal(missing.calls.length, 0);
+  } finally { await missing.ctx.fiber.dispose(); }
+  const invalid = setup(streamOf('直接改写，没有模式行'));
+  try {
+    const result = await invalid.service.optimize({ sessionId: invalid.agent.id, endSeq: 9,
+      text: '优化我', before: '', after: '' });
+    assert.equal(result.status, 'error');
+    assert.equal(result.reason, 'invalid-output');
+  } finally { await invalid.ctx.fiber.dispose(); }
+});
+
+test('listModels maps providers and caches the catalog for the settings page', async () => {
+  let lookups = 0;
+  const f = setup(answer, {}, {
+    listProviders: () => [{ id: 'provider-a', name: 'Provider A' }],
+    listModels: async provider => { lookups += 1; return [{ id: 'model-a', name: 'Model A', description: 'fast' }]; },
+  });
+  try {
+    const first = await f.service.listModels({});
+    assert.deepEqual(first, { status: 'ready', reason: 'none', providers: [{
+      id: 'provider-a', name: 'Provider A',
+      models: [{ id: 'model-a', name: 'Model A', description: 'fast' }],
+    }] });
+    const second = await f.service.listModels({});
+    assert.strictEqual(second, first, 'the successful catalog is reused within its TTL');
+    assert.equal(lookups, 1);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('predict uses the configured auxiliary route when one is set', async () => {
+  const f = setup(answer, { provider: 'aux-provider', model: 'aux-model' });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.equal(f.calls[0].provider, 'aux-provider');
+    assert.equal(f.calls[0].model, 'aux-model');
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('a configured but unavailable auxiliary route is reported instead of falling back', async () => {
+  const f = setup(answer, { provider: 'missing', model: 'missing' }, {
+    resolveModelInfo: async () => { throw new Error('unknown provider'); },
+  });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(f.calls.length, 0);
+    const continued = await f.service.continueDraft({ sessionId: f.agent.id, endSeq: 9, prefix: 'a', suffix: '' });
+    assert.equal(continued.status, 'unavailable');
+    assert.equal(continued.reason, 'model-unavailable');
+  } finally { await f.ctx.fiber.dispose(); }
 });

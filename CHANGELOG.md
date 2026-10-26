@@ -2,6 +2,28 @@
 
 All notable changes to this plugin are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-26
+
+### Added
+
+- Configurable auxiliary model for next-prompt previews, draft continuation and `/clarify` optimization. Empty configuration keeps using the session model; no extra credentials are introduced.
+- Shortcut commands `local-prompt-assist.predict` (manual trigger; next prompt on an empty draft, continuation otherwise) and `local-prompt-assist.toggle-auto` (automatic preview on/off). Both are remappable through the native DSH shortcut settings; conflicting defaults degrade to unbound instead of breaking the plugin.
+- Manual draft continuation: a trigger asks for text at the caret, a row below the composer previews it, Tab inserts and Esc dismisses. Edits and caret movement invalidate the preview.
+- `/clarify`-based one-click optimization for a selected instruction (or the whole draft when there is no selection). Results follow a `MODE: replace` / `MODE: questions` protocol, are previewed before applying, and can be undone. The skill body is read at runtime; a missing skill is reported instead of silently falling back to a generic rewrite.
+- Settings page **Settings → Prompt assist** with the automatic-prediction toggle, auxiliary model picker and shortcut reference. The new fields are volatile, so changes apply without reloading the plugin.
+
+### Changed
+
+- `apply(ctx, config)` now declares a Schemastery `Config` and registers the additional Typert methods `continueDraft`, `optimize` and `listModels`.
+- The client bundle injects the native shortcut and settings services; `build.mjs` now includes `src/draft-assist.js`.
+- The plugin description, READMEs, and AGENTS notes now cover the settings page, shortcuts and the new draft flows.
+
+### Compatibility
+
+- DSH `>=0.2.1-rc.2 <0.3.0`; Node.js >= 22. A new peer dependency on `@deepseek-ai/schemastery ^3.18.0` is provided by DSH.
+- Host changes require a DSH restart; client changes require a page refresh. Existing previews, history and remote `predict` request/result shapes remain compatible.
+- On web + Linux, DSH restricts editable shortcuts to `Ctrl+/`, `Ctrl+Shift+,` and `Ctrl+Shift+.`; the plugin defaults to the latter two for trigger/toggle, while desktop defaults to `Primary+Alt+J` / `Primary+Alt+K` (`Cmd+Option` on macOS).
+
 ## [1.2.0] - 2026-10-26
 
 ### Changed

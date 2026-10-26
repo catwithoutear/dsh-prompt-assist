@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialState, fold, sanitize, browseHistory, selectedModel, SYSTEM, viewOf } from '../src/core.js';
+import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, optimizeSystem,
+  browseHistory, selectedModel, routeOf, SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX } from '../src/core.js';
 import { requestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
 const user = text => ({ role: 'user', source: { kind: 'user-rpc' }, content: [{ type: 'text', text }] });
@@ -69,4 +70,37 @@ test('model choice stays session-local', () => {
 test('wire input rejects model overrides and invalid event cursors', () => {
   assert.throws(() => requestCodec.create().parse({ sessionId: 'a', endSeq: 2, model: 'other' }));
   assert.throws(() => requestCodec.create().parse({ sessionId: 'a', endSeq: -1 }));
+});
+test('routeOf prefers the configured auxiliary route and falls back to the session model', () => {
+  const session = { requestHeader: () => ({ config: { provider: 'fallback', model: 'fallback-model' } }) };
+  assert.deepEqual(routeOf({ provider: 'aux-provider', model: 'aux-model' }, undefined, session),
+    { provider: 'aux-provider', model: 'aux-model', source: 'aux' });
+  assert.deepEqual(routeOf({ provider: '', model: '' }, { next: { provider: 'session', model: 'session-model' } }, session),
+    { provider: 'session', model: 'session-model', reasoningEffort: undefined, source: 'session' });
+  const live = { provider: { get: () => 'live-provider' }, model: { get: () => 'live-model' } };
+  assert.equal(routeOf(live, undefined, session).provider, 'live-provider');
+});
+test('continuation text keeps a useful single line and rejects assistant or UI wording', () => {
+  assert.equal(sanitizeContinuation('并补一个回归测试。'), '并补一个回归测试。');
+  assert.equal(sanitizeContinuation('“请补充错误处理。”'), '请补充错误处理。');
+  for (const text of ['', '第一行\n第二行', '按 Tab 插入', '我会补测试。', '```js', 'x'.repeat(CONTINUE_MAX + 1)])
+    assert.equal(sanitizeContinuation(text), '', text);
+});
+test('parseOptimize accepts the MODE protocol, strips fences and enforces limits', () => {
+  assert.deepEqual(parseOptimize('MODE: replace\n\n请补充一个最小复现。'),
+    { mode: 'replace', text: '请补充一个最小复现。', reason: 'none' });
+  assert.deepEqual(parseOptimize('```\nMODE: questions\n\n1. 目标平台？\n2. 是否兼容旧版本？\n```'),
+    { mode: 'questions', text: '1. 目标平台？\n2. 是否兼容旧版本？', reason: 'none' });
+  assert.equal(parseOptimize('请直接改写').reason, 'invalid-output');
+  assert.equal(parseOptimize('MODE: replace\n').reason, 'empty');
+  assert.equal(parseOptimize(`MODE: replace\n\n${'长'.repeat(OPTIMIZE_REPLACE_MAX + 1)}`).reason, 'limit');
+  assert.equal(parseOptimize('MODE: replace\n\n按 Tab 应用').reason, 'invalid-output');
+  assert.equal(parseOptimize('MODE: replace\n\n我会补一个测试。').reason, 'invalid-output');
+});
+test('the optimize prompt appends the one-shot contract after the skill body', () => {
+  const prompt = optimizeSystem('SKILL-BODY');
+  assert.match(prompt, /^SKILL-BODY/);
+  assert.match(prompt, /One-shot application contract/);
+  assert.match(prompt, /MODE: replace/);
+  assert.match(prompt, /MODE: questions/);
 });
