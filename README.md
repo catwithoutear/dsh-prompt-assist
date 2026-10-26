@@ -1,22 +1,27 @@
 # Prompt Preview & History
 
-A DSH plugin that suggests the next user prompt after a completed answer, and lets you browse and restore recent prompts with ↑/↓ — inside the native composer.
+A DSH plugin that suggests the next user prompt after a completed answer, lets you browse and restore recent prompts with ↑/↓, continues the draft you are typing, and clarifies a selected instruction with `/clarify` — all inside the native composer.
 
 [中文文档](README_ZH.md)
 
 ## Features
 
-- **Next-prompt preview.** After a turn completes with a real answer, the empty composer shows one short next message drafted from the user's perspective, using the session's current model.
-- **Suggest, never send.** The suggestion is only a preview. Tab fills it into the draft; Esc ignores it. Nothing is sent automatically and the draft is never written in the background.
-- **Reuse without re-calling the model.** A suggestion generated for a completed turn is cached. Typing, paste, IME composition, and history browsing only hide it; clearing the draft restores the same suggestion without another model call.
-- **Prompt history.** ↑ walks back through recent prompts, ↓ walks forward, and going past the newest entry restores the original draft. A typed prefix filters the history, and editing exits history mode.
-- **Native layout.** The preview occupies the composer's existing overlay seat. Only a ready suggestion expands the input card, so the editor keeps focus, caret, and IME behavior; without a suggestion the composer looks untouched, and while a suggestion is being generated the native placeholder stays visible.
+- **Next-prompt preview.** After a completed answer, the empty composer shows one short next message drafted from the user's perspective, using the session model or a configured auxiliary model.
+- **Configurable auxiliary model.** Choose any provider/model already configured in DSH under **Settings → Prompt assist**. Leave it empty to follow the session model. The plugin stores no extra API keys and never silently falls back.
+- **Shortcut trigger and automatic mode.** `Trigger prompt prediction` asks for the next prompt when the draft is empty and for a continuation when it is not. `Toggle automatic prompt prediction` switches the post-answer automatic suggestion on or off (on by default, persisted).
+- **Remappable shortcuts.** Both commands are editable under **Settings → General → Shortcuts** with the native recorder. If a default binding conflicts, the plugin still loads and tells you to assign one manually.
+- **Draft continuation.** With text in the composer, the trigger asks for a continuation at the caret. A preview row below the composer shows it; Tab inserts, Esc dismisses, and nothing is sent.
+- **One-click optimization.** Select text (or leave the caret collapsed to optimize the whole draft) and press **Optimize** in the composer tool row. The selected instruction is clarified according to the `/clarify` skill. The result is previewed first and applied only on confirmation, so it can be undone. Blocking ambiguity produces questions instead of a replacement.
+- **Suggest, never send.** Every result is a preview. Only Tab or **Apply** writes to the draft; the plugin never sends or submits.
+- **Native layout.** The next-prompt preview keeps using the composer's existing overlay seat; continuation and optimization use a row below the composer. The editor DOM is never injected.
+- **Prompt history.** ↑ walks back through recent prompts, ↓ walks forward, and going past the newest entry restores the original draft. A typed prefix filters the history.
 
 ## Compatibility
 
 - DSH `>=0.2.1-rc.2 <0.3.0`, Node.js >= 22.
 - Disable `dsh-prompt-history` before enabling this plugin. Running both creates duplicate keyboard listeners and overlapping previews.
-- No extra model configuration. Preview generation uses the session's selected model and consumes that model's quota.
+- By default the plugin uses the session model and consumes its quota; a configured auxiliary model consumes that model's quota. The plugin adds no credentials of its own.
+- Shortcuts reuse the native DSH registry and persistence. On **web + Linux**, DSH only allows `Ctrl+/`, `Ctrl+Shift+,`, and `Ctrl+Shift+.`; `Ctrl+/` is already used by the shortcut page, so the plugin defaults to `Ctrl+Shift+.` (trigger) and `Ctrl+Shift+,` (toggle). Desktop is unrestricted and defaults to `Primary+Alt+J` / `Primary+Alt+K` (`Cmd+Option` on macOS).
 
 ## Installation
 
@@ -32,29 +37,41 @@ To update an existing install: rebuild with `npm run build`, reinstall or re-app
 
 ## Usage
 
-1. Wait for an answer to finish completely. When the session is idle and no input is queued, a grey suggestion appears in the visible, empty composer with the hint `Tab to accept · Esc to dismiss`.
-2. Press **Tab** to copy the suggestion into the draft. It is not sent.
-3. Press **Esc** to ignore the suggestion for that turn.
-4. Press **↑** for an older prompt, **↓** for a newer one. Going past the newest entry restores the draft you started with. With text in the composer, history only shows entries starting with that prefix.
-5. Typing, pasting, IME composition, or opening history hides the current suggestion. Clearing the draft brings a cached suggestion back.
+1. **Next prompt**: wait for an answer to finish. When the session is idle and no input is queued, a grey suggestion appears in the visible, empty composer with the hint `Tab to accept · Esc to dismiss`.
+2. **Manual trigger**: focus the composer and press the trigger shortcut. An empty draft requests the next prompt; a non-empty draft with a collapsed caret requests a continuation at the caret.
+3. **Continuation**: the result appears below the composer. Tab inserts it at the current caret; moving the caret or editing the draft requires a fresh trigger.
+4. **Optimize**: select the text to clarify (or keep the caret collapsed to optimize the whole draft), then press **Optimize** in the tool row:
+   - `MODE: replace`: press **Apply** to replace the selection (or the whole draft) or **Cancel**;
+   - `MODE: questions`: only the blocking questions are shown; edit the draft and trigger again.
+5. **Automatic mode**: press the toggle shortcut or use the settings page. Automatic requests stop when it is off; manual triggers still work.
+6. **History**: press ↑ for an older prompt and ↓ for a newer one. Going past the newest entry restores the draft you started with. With text in the composer, history only shows entries starting with that prefix.
 
-The suggestion is hidden while the session is running, while files or images are attached, and whenever the composer is not in its plain editing state. History restores text only; attachments from earlier prompts are not recreated.
+While the session is running, while files or images are attached, or when the composer is not in its plain editing state, suggestions are hidden. Whole-draft optimization is unavailable while the draft contains reference chips; a selection that overlaps a chip is rejected. Continuation is not affected by chips. History restores text only.
+
+## Settings
+
+**Settings → Prompt assist** provides:
+
+- **Automatic prompt prediction**: whether to generate the next-prompt suggestion after each completed answer (on by default).
+- **Auxiliary model**: "Follow the session model" or a configured provider/model. Changes apply immediately without reloading the plugin.
+- **Shortcuts**: the current keys for both commands, with a pointer to **Settings → General → Shortcuts**.
 
 ## Behavior and guarantees
 
-- **Eligibility.** A suggestion is requested only after a `completed` turn whose final assistant message has text, is not interrupted, and contains no tool calls; the session must be idle with no queued input. Tool activity, message rendering, and focus changes do not trigger it.
-- **Model choice.** The preview uses the session's `modelSelection.next` or `lastUsed`, falling back to the session request header. It never falls back to a global default and keeps the same provider and model. When available, the lowest reasoning effort is used; otherwise the session's selected effort is kept. Output is capped at 2048 tokens with a 60-second timeout.
-- **Context.** Only the last 8 user and assistant text messages are sent, with roles preserved. User text is trimmed to the last 2,400 characters and assistant text to 3,200; tool output, reasoning, and system prompts are excluded.
-- **Filtering.** The system prompt asks for fewer than 160 characters. Suggestions that are empty, longer than 200 characters, multiline, start with Markdown/list/role prefixes, or read like assistant chatter are discarded. Failures and empty results are not retried automatically; a timeout is reported as stale and may be retried the next time the composer becomes eligible.
-- **History.** The last 200 human text messages are considered, with consecutive duplicates merged. History restores text only and is rebuilt from the session log, so it survives a page refresh.
-- **Safety.** No global overlay, fixed positioning, DOM injection, chat DOM watching, or polling. The preview is a status element inside the composer overlay slot, and its layout styles are scoped to the plugin and removed with the component.
+- **Eligibility.** The next-prompt preview is requested only after a `completed` turn whose final assistant message has text, is not interrupted, and contains no tool calls; the session must be idle with no queued input. Continuation is manual-only. Optimization is button-driven and not tied to turn eligibility, but requires the plain composer state.
+- **Model choice.** By default the plugin uses `modelSelection.next` or `lastUsed`, falling back to the session request header. A configured auxiliary route is validated before every call; an unavailable route produces an actionable error instead of a silent fallback. Next-prompt and continuation use the lowest supported reasoning effort; optimization leaves the effort to the provider.
+- **Context and limits.** Next-prompt sends the last 8 user/assistant text messages (user ≤2,400 and assistant ≤3,200 characters). Continuation sends recent transcript plus the draft prefix/suffix (≤8,000 characters total) and caps output at 160 single-line characters. Optimization sends the selection (≤6,000 characters) and a small context window (≤800 characters on each side); replace output is capped at 6,000 characters and questions at 2,000. Over-limit, timeout, empty output, malformed output, and a missing skill all produce explicit errors.
+- **Filtering.** The next-prompt system prompt and 200-character filter are unchanged. Continuation and optimization have their own validators that reject assistant chatter, UI instructions, and empty results. Optimization output must follow the `MODE:` protocol.
+- **Writes and races.** Every write is checked against the draft revision: continuation also requires the caret to still be where the trigger captured it; whole-draft optimization uses the revision-guarded `insertText`, never the unguarded `setDraft`. Late results, canceled requests, and previews invalidated by editing are never written.
+- **History.** The last 200 human text messages are considered, with consecutive duplicates merged; history is rebuilt from the session log and survives a page refresh.
+- **Safety.** No global overlay, fixed positioning, DOM injection, chat DOM watching, or polling. The preview is a status element in a DSH slot; the Host revalidates the session, turn, model route, and input lengths, and the client cannot choose a model or supply skill content.
 
 ## Development
 
 ```sh
 npm ci
 npm run build       # regenerate lib/client.js from src/
-npm test            # node:test suites
+npm test            # node:test suites, currently 41 tests
 npm run check       # syntax-check src/index.js and lib/client.js
 npm pack --dry-run  # inspect the distribution file list
 ```
@@ -63,23 +80,25 @@ Edit only the modules under `src/`. `lib/client.js` is generated by `build.mjs` 
 
 ## Testing
 
-The suite contains 22 tests in three files:
+The suite contains 41 tests in four files:
 
-- `test/core.test.js` — session folding, eligibility, sanitization, history walking, model selection, wire validation.
-- `test/preview-state.test.js` — candidate caching, visibility transitions, cancellation, late results, dismissal, and retry rules.
-- `test/host.test.js` — the Host service against a real Cordis context with stubbed agents, projections, and LLM stream.
+- `test/core.test.js` — session folding, eligibility, sanitization, route resolution, `MODE:` parsing, history walking, wire validation.
+- `test/preview-state.test.js` — candidate caching, visibility transitions, automatic/manual triggers, cancellation, late results.
+- `test/draft-assist.test.js` — continuation/optimization preview state machine, single-flight, late-drop, errors, cancellation.
+- `test/host.test.js` — the Host service against a real Cordis context with stubbed agents, projections, skills, working directory, and LLM stream.
 
-The tests cover pure logic, the preview controller, and the main `predict` path. They do not cover the plugin's `apply()` registration, the React client component, native browser events, or actual layout geometry, and they do not prove the quality of real model output. Browser and visual verification are not automated.
+The tests cover pure logic, controllers, and the main Host paths. They do not cover the plugin's `apply()` registration, the React client components, native browser events, or actual layout geometry, and they do not prove the quality of real model output. Browser and visual verification are not automated.
 
 ## Project layout
 
 ```text
 src/                 hand-written ESM modules
-  index.js           Host entry: projection registration, Typert service, model call
-  core.js            shared session fold, decisions, history, sanitization
-  remote.js          Typert wire codecs and descriptor
-  preview-state.js   client-side preview controller
-  client-entry.js    React composer UI, slots, CSS, keyboard handling
+  index.js           Host entry: Config, projection registration, Typert service, model/skill calls
+  core.js            shared fold, prompt contracts, validators, route resolution
+  remote.js          Typert wire codecs and descriptors
+  preview-state.js   next-prompt controller (automatic/manual triggers)
+  draft-assist.js    continuation/optimization preview state machine
+  client-entry.js    React composer UI, settings page, shortcuts, slots, CSS
 lib/client.js        browser bundle generated by build.mjs (committed)
 test/                node:test suites and Harness resolution hook
 locale/              plugin title and description metadata
@@ -92,10 +111,11 @@ package.json         exports, distribution whitelist, DSH manifest
 
 ## Limitations
 
-- Suggestion quality depends on the current model. The plugin only filters obviously invalid output; it cannot guarantee a useful next prompt.
-- A failed or empty generation shows no suggestion and is not retried for that turn. A timeout is treated as stale and can be requested again on the next eligible visibility change.
-- Layout compatibility relies on DSH composer internals (overlay slot, editor state, and data attributes). Re-check the composer after a DSH upgrade.
-- There is no settings page, side chat, clipboard feature, completion, or second history store.
+- Suggestion and optimization quality depends on the selected model. The plugin only filters structure and obviously invalid output.
+- On web + Linux only the three DSH-allowed shortcut combinations are usable; desktop can record any combination. A conflicting default requires a manual shortcut assignment.
+- The continuation/optimization row sits below the composer; its layout, scrolling, and focus behavior rely on DSH composer slots and need re-checking after a DSH upgrade.
+- The `/clarify` skill is provided by the user's environment. When it is missing or renamed, optimization is unavailable and the plugin does not degrade to a generic rewrite.
+- There is no side chat, clipboard feature, second history store, or self-built shortcut system.
 
 ## License
 

@@ -132,3 +132,61 @@ test('effect cleanup/setup can restore an existing candidate without another req
     assert.equal(calls, 1);
   } finally { c.dispose(); }
 });
+
+test('auto mode off suppresses automatic generation but a manual trigger still requests once', { timeout: 2000 }, async () => {
+  let calls = 0;
+  const c = createPreviewController({ delay: 0, predict: async () => { calls++; return result('手动建议'); } });
+  try {
+    c.sync({ ...options(), auto: false });
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(calls, 0, 'no automatic request while auto is off');
+    assert.equal(c.getSnapshot().text, '');
+    c.trigger();
+    await candidate(c);
+    assert.equal(calls, 1);
+    assert.equal(c.getSnapshot().text, '手动建议');
+    c.trigger();
+    assert.equal(calls, 1, 'a settled manual candidate is reused');
+    c.sync({ ...options('session-a:turn-10:model-a'), auto: false });
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(calls, 1, 'a new turn with auto off still waits for a manual trigger');
+    c.trigger();
+    await candidate(c);
+    assert.equal(calls, 2);
+  } finally { c.dispose(); }
+});
+
+test('manual trigger bypasses a settled failure and can retry the same context', { timeout: 2000 }, async () => {
+  let calls = 0;
+  const c = createPreviewController({ delay: 0, predict: async () => {
+    calls++;
+    return calls === 1 ? { ok: false } : result('第二次成功');
+  } });
+  try {
+    c.sync(options());
+    await new Promise(resolve => { const off = c.subscribe(() => { if (!c.getSnapshot().pending && calls) { off(); resolve(); } }); });
+    assert.equal(calls, 1);
+    c.pause(); c.sync(options());
+    assert.equal(calls, 1, 'an automatic clear does not retry a failed context');
+    c.trigger();
+    await candidate(c);
+    assert.equal(calls, 2);
+    assert.equal(c.getSnapshot().text, '第二次成功');
+  } finally { c.dispose(); }
+});
+
+test('manual trigger restores a candidate hidden by the auto-off pause', { timeout: 2000 }, async () => {
+  let calls = 0;
+  const c = createPreviewController({ delay: 0, predict: async () => { calls++; return result('手动恢复'); } });
+  try {
+    c.sync({ ...options(), auto: true });
+    await candidate(c);
+    c.sync({ ...options(), auto: false });
+    c.pause();
+    assert.equal(c.getSnapshot().text, '', 'auto-off hides the current candidate');
+    c.trigger();
+    await candidate(c);
+    assert.equal(calls, 1, 'the hidden candidate is restored without another request');
+    assert.equal(c.getSnapshot().text, '手动恢复');
+  } finally { c.dispose(); }
+});
