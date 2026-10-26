@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPreviewController } from '../preview-state.js';
+import { createPreviewController } from '../src/preview-state.js';
 
 const KEY = 'session-a:turn-9:model-a';
 const result = text => ({ ok: true, value: { status: 'ready', text } });

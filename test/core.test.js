@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialState, fold, sanitize, browseHistory, selectedModel, SYSTEM, viewOf } from '../core.js';
-import { requestCodec } from '../remote.js';
+import { initialState, fold, sanitize, browseHistory, selectedModel, SYSTEM, viewOf } from '../src/core.js';
+import { requestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
 const user = text => ({ role: 'user', source: { kind: 'user-rpc' }, content: [{ type: 'text', text }] });
 const answer = (text, extra = []) => ({ turn: 1, message: { role: 'assistant', content: [{ type: 'text', text }, ...extra] } });

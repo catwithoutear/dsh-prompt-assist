@@ -1,5 +1,5 @@
 /** Pure session fold and composer decisions, shared by Host and Client. */
-export const PACKAGE = '@local/dsh-prompt-assist';
+export const PACKAGE = '@catwithoutear/dsh-prompt-assist';
 export const PROJECTION = 'localPromptAssist';
 export const HISTORY_LIMIT = 200;
 export const SYSTEM = `You write the next USER message in a conversation with an AI assistant.

@@ -1,4 +1,4 @@
 - insert:
-    - id: local-prompt-assist
-      name: '@local/dsh-prompt-assist'
+    - id: dsh-prompt-assist
+      name: '@catwithoutear/dsh-prompt-assist'
       config: {}

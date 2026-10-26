@@ -20,11 +20,11 @@ export const resultCodec = codec('PromptAssistResult', {
 }, v => object(v) && Object.keys(v).length === 2 && typeof v.text === 'string'
   && ['ready', 'unavailable', 'stale', 'error'].includes(v.status));
 export const descriptor = {
-  id: '@local/dsh-prompt-assist#localPromptAssist/predict',
+  id: '@catwithoutear/dsh-prompt-assist#localPromptAssist/predict',
   service: 'localPromptAssist', namespace: 'localPromptAssist', method: 'predict',
   invocation: { kind: 'direct' },
   parameters: [{ name: 'request', wire: 'request', source: 'json', codec: requestCodec }],
   cancellation: { parameter: 'signal' }, result: resultCodec,
   description: 'Generate one next-user-message preview for the exact completed turn; never sends a user message.',
 };
-export const remoteContribution = { package: '@local/dsh-prompt-assist', descriptors: [descriptor] };
+export const remoteContribution = { package: '@catwithoutear/dsh-prompt-assist', descriptors: [descriptor] };

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
-import { PromptAssist } from '../index.js';
-import { initialState } from '../core.js';
-import { createPreviewController } from '../preview-state.js';
+import { PromptAssist } from '../src/index.js';
+import { initialState } from '../src/core.js';
+import { createPreviewController } from '../src/preview-state.js';
 
 function setup(stream) {
   const ctx = new Context();

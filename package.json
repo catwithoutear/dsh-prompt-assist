@@ -1,6 +1,6 @@
 {
-  "name": "@local/dsh-prompt-assist",
-  "version": "1.0.2",
+  "name": "@catwithoutear/dsh-prompt-assist",
+  "version": "1.2.0",
   "description": "Next user prompt previews after completed answers, with Up/Down prompt history.",
   "private": true,
   "type": "module",
@@ -12,11 +12,11 @@
   "homepage": "https://github.com/catwithoutear/dsh-prompt-assist#readme",
   "engines": { "node": ">=22", "dsh": ">=0.2.1-rc.2 <0.3.0" },
   "exports": {
-    ".": "./index.js", "./client": "./client.js",
+    ".": "./src/index.js", "./client": "./lib/client.js",
     "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg"
   },
-  "files": ["index.js", "core.js", "remote.js", "preview-state.js", "client.js", "client-entry.js", "build.mjs", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md", "LICENSE"],
-  "scripts": { "build": "node build.mjs", "test": "node --import ./test/runtime-loader.mjs --test test/*.test.js", "check": "node --check index.js && node --check client.js" },
+  "files": ["src", "lib/client.js", "build.mjs", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md", "README_ZH.md", "CHANGELOG.md", "LICENSE"],
+  "scripts": { "build": "node build.mjs", "test": "node --import ./test/runtime-loader.mjs --test test/*.test.js", "check": "node --check src/index.js && node --check lib/client.js" },
   "dependencies": { "zod": "4.4.3" },
   "peerDependencies": { "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.2 <0.3.0" },
   "dsh": {
