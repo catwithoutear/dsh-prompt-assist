@@ -1,6 +1,6 @@
 {
   "name": "@catwithoutear/dsh-prompt-assist",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Next prompt previews and continue-after-draft suggestions with Up/Down history, configurable auxiliary model, shortcuts and /clarify optimization.",
   "type": "module",
   "license": "MIT",
