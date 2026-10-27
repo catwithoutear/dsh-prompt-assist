@@ -2,6 +2,12 @@
 
 All notable changes to this plugin are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** the shortcut command ids now match the package namespace: `dsh-prompt-assist.predict` and `dsh-prompt-assist.toggle-auto` (previously `local-prompt-assist.*`). Bindings customized under the old ids no longer apply; reassign them under **Settings → General → Shortcuts**. The plugin's internal locale namespace, slot ids and projection/service key are unchanged.
+
 ## [1.3.2] - 2026-10-27
 
 ### Fixed
