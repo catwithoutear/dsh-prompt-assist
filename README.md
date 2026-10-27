@@ -50,11 +50,11 @@ While the session is running, while files or images are attached, or when the co
 
 ## Settings
 
-**Settings → Prompt assist** provides:
+**Settings → Prompt assist** uses the native settings layout:
 
-- **Automatic prompt prediction**: whether to generate the next-prompt suggestion after each completed answer (on by default).
-- **Auxiliary model**: "Follow the session model" or a configured provider/model. Changes apply immediately without reloading the plugin.
-- **Shortcuts**: the current keys for both commands, with a pointer to **Settings → General → Shortcuts**.
+- **Automation**: one switch for generating the next-prompt suggestion after each completed answer (on by default).
+- **Auxiliary model**: a card with "Follow the session model" or a configured provider/model; after choosing a provider you can pick a specific model or keep the provider default. Changes apply immediately without reloading the plugin.
+- **Shortcuts**: key badges for both commands, "Unbound" when unset, and a pointer to **Settings → General → Shortcuts**.
 
 ## Behavior and guarantees
 

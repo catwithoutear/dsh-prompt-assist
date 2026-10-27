@@ -13,6 +13,8 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ### Changed
 
+- **Settings page redesigned** to match the native DSH settings layout: grouped sections with uppercase group titles, a hairline-separated switch row, an auxiliary-model card with themed selects and a "use the session model" reset link, and shortcut rows rendered as key badges ("Unbound" when a command has no default). No new strings are exposed outside the existing zh/en dictionaries.
+
 - `engines.dsh` raised to `>=0.2.1-rc.3` to match the protocol dependency floor.
 
 ### Upgrade note
