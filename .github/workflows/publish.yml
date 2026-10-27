@@ -1,0 +1,44 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.repository == 'catwithoutear/dsh-prompt-assist'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Set up npm with OIDC support
+        run: npm install --global npm@11
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          package_version=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_REF_NAME" != "v${package_version}" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package version v${package_version}"
+            exit 1
+          fi
+
+      - name: Install all dependencies
+        run: npm ci --include=dev
+
+      # package.json prepack already runs build, check, and all tests.
+      - name: Publish with npm Trusted Publishing
+        run: npm publish --access public
