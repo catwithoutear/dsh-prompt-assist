@@ -2,6 +2,12 @@
 
 All notable changes to this plugin are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Inject the plugin stylesheet from `apply()` instead of rendering it inside the composer overlay. Previously the CSS only existed while the composer overlay was mounted, so opening **Settings → Prompt assist** without a composer left the section as unstyled native controls.
+
 ## [1.3.3] - 2026-10-27
 
 ### Changed
