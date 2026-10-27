@@ -566,7 +566,7 @@ function makeClient(React) {
     const providerEntry = models.providers?.find(item => item.id === provider);
     const providers = models.providers ?? [];
     const shortcutRows = (catalog ?? [])
-      .filter(row => row.id === 'local-prompt-assist.predict' || row.id === 'local-prompt-assist.toggle-auto');
+      .filter(row => row.id === 'dsh-prompt-assist.predict' || row.id === 'dsh-prompt-assist.toggle-auto');
     const setField = (field, next) => {
       void Promise.resolve(configForm.set(field, next)).then(ok => setSaveError(!ok), () => setSaveError(true));
     };
@@ -759,10 +759,10 @@ function makeClient(React) {
         'desktop:windows': key(code, ['primary', 'alt']), 'desktop:linux': key(code, ['primary', 'alt']) });
       const webShift = code => ({ 'web:macos': key(code, ['primary', 'shift']),
         'web:windows': key(code, ['primary', 'shift']), 'web:linux': key(code, ['primary', 'shift']) });
-      ctx.effect(() => registerCommand(ctx, command('local-prompt-assist.predict', 'command.predict', {
+      ctx.effect(() => registerCommand(ctx, command('dsh-prompt-assist.predict', 'command.predict', {
         ...desktopAlt('KeyJ'), ...webShift('Comma'),
       }), logger));
-      ctx.effect(() => registerCommand(ctx, command('local-prompt-assist.toggle-auto', 'command.toggle', {
+      ctx.effect(() => registerCommand(ctx, command('dsh-prompt-assist.toggle-auto', 'command.toggle', {
         ...desktopAlt('KeyK'),
       }), logger));
       await ctx.remote.$mount(remoteContribution);
