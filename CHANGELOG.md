@@ -2,6 +2,29 @@
 
 All notable changes to this plugin are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Client shortcut defaults no longer collide with DSH's own commands on any runtime/platform pair. The shortcut registry validates every pair at registration time, and a conflicting default is thrown from the other plugin's own registration, which could fail that plugin's client entry and reject the whole Web boot audit. This plugin now reserves only bindings that are free across the built-in command set and the official optional inspector:
+  - `local-prompt-assist.predict`: `Primary+Alt+J` on desktop; `Primary+Shift+,` (web `Ctrl+Shift+,`) on Web.
+  - `local-prompt-assist.toggle-auto`: `Primary+Alt+K` on desktop; unbound on Web (the two other Web-legal defaults already belong to `shortcuts.open` and the inspector; assign a binding under **Settings → General → Shortcuts**).
+- `@deepseek-ai/dsh-typert-protocol` moved from `peerDependencies` to `dependencies` (`^0.2.1-rc.3`). Profiles that still carry a stale hoisted `@deepseek-ai/*` tree (for example `~/.dsh/profiles/node_modules` from an older global CLI install) shadowed the Host's protocol package; the plugin then imported an older protocol whose `Remote()` decorator rejects the `resources` option and its Host half failed to import. The documented reason for the dependency placement is in `AGENTS.md`.
+
+### Changed
+
+- `engines.dsh` raised to `>=0.2.1-rc.3` to match the protocol dependency floor.
+
+### Upgrade note
+
+- Rerun `npm run build` from a checkout and reinstall/update the plugin bundle so the new dependency is fetched, then restart DSH (Host and client code both changed).
+
+## [1.3.1] - 2026-10-27
+
+### Changed
+
+- Version-only release (no plugin code changes); npm publishing moved to GitHub Actions OIDC Trusted Publishing.
+
 ## [1.3.0] - 2026-10-26
 
 ### Added
