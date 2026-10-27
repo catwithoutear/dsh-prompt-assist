@@ -270,6 +270,19 @@ function makeClient(React) {
   background:var(--dsw-alias-bg-module-platform,transparent);color:var(--dsw-alias-label-secondary);white-space:nowrap}
 .dsh-pa-kbd-unbound{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
 `;
+  const STYLE_ID = 'dsh-prompt-assist-styles';
+  /** Mount the plugin stylesheet once at apply time; settings render without a composer overlay. */
+  function installStyles() {
+    if (typeof document === 'undefined') return () => {};
+    const existing = document.getElementById(STYLE_ID);
+    if (existing !== null) { existing.textContent = CSS; return () => {}; }
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = CSS;
+    document.head.appendChild(style);
+    return () => { style.remove(); };
+  }
+
 
   function PromptComposer(props) {
     const { useInput, useSession, useProjection, inputActions, sessionId, t } = props;
@@ -449,8 +462,7 @@ function makeClient(React) {
       shown?.text && h('div', { className: 'dsh-pa-preview', 'data-prompt-assist-preview': '',
         role: 'status', 'aria-live': 'polite' },
         h('span', { className: 'dsh-pa-text' }, shown.text),
-        h('span', { className: 'dsh-pa-hint' }, t('preview.accept'))),
-      h('style', null, CSS));
+        h('span', { className: 'dsh-pa-hint' }, t('preview.accept'))));
   }
 
   function useAssist(sessionId) {
@@ -728,6 +740,7 @@ function makeClient(React) {
         'notice.auto-on': 'Automatic prompt prediction is on.', 'notice.auto-off': 'Automatic prompt prediction is off.',
         'error.predict-failed': 'Prompt prediction failed. Try again or check the settings.',
       });
+      ctx.effect(() => installStyles(), 'prompt-assist: styles');
       ctx.effect(() => () => { bridge = undefined; configForm = undefined; shortcuts = undefined; notifyBridge(); });
       ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
         name: 'conversation.input.overlay', id: 'local-prompt-assist', order: 20, locale: NS,
