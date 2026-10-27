@@ -2,9 +2,9 @@
   "name": "@catwithoutear/dsh-prompt-assist",
   "version": "1.3.0",
   "description": "Next prompt previews and continue-after-draft suggestions with Up/Down history, configurable auxiliary model, shortcuts and /clarify optimization.",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/catwithoutear/dsh-prompt-assist.git"
@@ -16,7 +16,7 @@
     "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg"
   },
   "files": ["src", "lib/client.js", "build.mjs", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md", "README_ZH.md", "CHANGELOG.md", "LICENSE"],
-  "scripts": { "build": "node build.mjs", "test": "node --import ./test/runtime-loader.mjs --test test/*.test.js", "check": "node --check src/index.js && node --check lib/client.js" },
+  "scripts": { "build": "node build.mjs", "test": "node --import ./test/runtime-loader.mjs --test test/*.test.js", "check": "node --check src/index.js && node --check lib/client.js", "prepack": "npm run build && npm run check && npm test" },
   "dependencies": { "zod": "4.4.3" },
   "peerDependencies": {
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.2 <0.3.0",
