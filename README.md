@@ -21,7 +21,7 @@ A DSH plugin that suggests the next user prompt after a completed answer, lets y
 - DSH `>=0.2.1-rc.2 <0.3.0`, Node.js >= 22.
 - Disable `dsh-prompt-history` before enabling this plugin. Running both creates duplicate keyboard listeners and overlapping previews.
 - By default the plugin uses the session model and consumes its quota; a configured auxiliary model consumes that model's quota. The plugin adds no credentials of its own.
-- Shortcuts reuse the native DSH registry and persistence. On **web + Linux**, DSH only allows `Ctrl+/`, `Ctrl+Shift+,`, and `Ctrl+Shift+.`; `Ctrl+/` is already used by the shortcut page, so the plugin defaults to `Ctrl+Shift+.` (trigger) and `Ctrl+Shift+,` (toggle). Desktop is unrestricted and defaults to `Primary+Alt+J` / `Primary+Alt+K` (`Cmd+Option` on macOS).
+- Shortcuts reuse the native DSH registry and persistence. On **web**, DSH only allows `Ctrl+/`, `Ctrl+Shift+,`, and `Ctrl+Shift+.`; `Ctrl+/` belongs to the shortcut page and `Ctrl+Shift+.` to the optional inspector bundle, so the manual trigger defaults to `Ctrl+Shift+,` and the auto-toggle stays unbound (assign it under **Settings → General → Shortcuts**). Desktop is unrestricted and defaults to `Primary+Alt+J` / `Primary+Alt+K` (`Cmd+Option` on macOS).
 
 ## Installation
 
@@ -112,7 +112,7 @@ package.json         exports, distribution whitelist, DSH manifest
 ## Limitations
 
 - Suggestion and optimization quality depends on the selected model. The plugin only filters structure and obviously invalid output.
-- On web + Linux only the three DSH-allowed shortcut combinations are usable; desktop can record any combination. A conflicting default requires a manual shortcut assignment.
+- On web only the three DSH-allowed shortcut combinations are usable, and two of them belong to official plugins (`shortcuts.open` and the optional inspector); desktop can record any combination. A conflicting default requires a manual shortcut assignment.
 - The continuation/optimization row sits below the composer; its layout, scrolling, and focus behavior rely on DSH composer slots and need re-checking after a DSH upgrade.
 - The `/clarify` skill is provided by the user's environment. When it is missing or renamed, optimization is unavailable and the plugin does not degrade to a generic rewrite.
 - There is no side chat, clipboard feature, second history store, or self-built shortcut system.

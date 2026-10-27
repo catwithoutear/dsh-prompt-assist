@@ -21,7 +21,7 @@
 - DSH `>=0.2.1-rc.2 <0.3.0`，Node.js >= 22。
 - 启用本插件前先停用 `dsh-prompt-history`。两者同时运行会产生重复的键盘监听和重叠的预览。
 - 默认使用会话已选模型并消耗该模型额度；配置辅助模型后消耗所选模型额度。插件本身不新增凭据。
-- 快捷键复用 DSH 原生注册与持久化。DSH 对 **web + Linux** 只允许 `Ctrl+/`、`Ctrl+Shift+,`、`Ctrl+Shift+.` 三个组合；`Ctrl+/` 已被 DSH 快捷键页占用，因此本插件在 web+Linux 的默认键是 `Ctrl+Shift+.`（触发）与 `Ctrl+Shift+,`（切换）。桌面端不受此限，默认 `Primary+Alt+J` / `Primary+Alt+K`（macOS 上为 Cmd+Option）。
+- 快捷键复用 DSH 原生注册与持久化。DSH 对 **web** 只允许 `Ctrl+/`、`Ctrl+Shift+,`、`Ctrl+Shift+.` 三个组合；`Ctrl+/` 属于快捷键页、`Ctrl+Shift+.` 属于可选的 inspector 插件，因此手动触发默认 `Ctrl+Shift+,`，自动预测开关在 web 上默认不绑定（可在 **设置 → 通用 → 快捷键** 手动指定）。桌面端不受此限，默认 `Primary+Alt+J` / `Primary+Alt+K`（macOS 上为 Cmd+Option）。
 
 ## 安装
 
@@ -112,7 +112,7 @@ package.json         exports、分发白名单、DSH manifest
 ## 限制
 
 - 建议与优化质量取决于所选模型。插件只做结构与明显无效输出的过滤，无法保证结果一定可用。
-- web + Linux 的快捷键只能使用 DSH 允许的三个组合；桌面端可以任意录制。默认键冲突时用户需要到快捷键设置手动指定。
+- web 端只能使用 DSH 允许的三个组合，其中两个已被官方插件（快捷键页、可选 inspector）占用；桌面端可以任意录制。默认键冲突时用户需要到快捷键设置手动指定。
 - 续写/优化预览行位于输入框下方，实际布局、滚动与焦点行为依赖 DSH composer 槽位；升级 DSH 后需要重新核对。
 - `/clarify` 技能由用户环境提供；技能缺失或被改名时优化不可用，插件不会退化成普通改写。
 - 没有侧聊、剪贴板、第二套历史存储或自建快捷键系统。
