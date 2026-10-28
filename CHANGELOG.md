@@ -2,6 +2,18 @@
 
 All notable changes to this plugin are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- One-click optimization no longer depends on an environment-provided skill. The clarifying contract now ships with the plugin (`OPTIMIZE_GUIDE` + `OPTIMIZE_CONTRACT`): preserve intent without adding requirements, resolve ambiguity from the draft before asking, fill in only what the draft determines, ask only about blocking ambiguity and unresolved conflicts, keep action authority and modifier strength, avoid AI boilerplate, and audit both directions before answering. The feature no longer depends on what is installed in the environment.
+- The Host no longer injects `skills` or `workingDirectory`; `optimize` reads no skill body at runtime and can no longer return `skill-unavailable`.
+- The button tooltip, error strings, package and locale metadata, and READMEs now describe the rewriting behavior instead of naming a `/clarify` skill. The `skill-unavailable` wire reason and its translations were removed.
+
+### Upgrade note
+
+- The Host dependency list and the optimization prompt changed. Reinstall or re-apply the bundle, restart DSH for the Host half, and refresh the page for the client half; refreshing alone does not replace the loaded Host module. Until the restart, optimization against the old Host can only report a generic failure.
+
 ## [1.3.4] - 2026-10-27
 
 ### Fixed

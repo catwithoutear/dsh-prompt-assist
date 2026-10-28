@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import Schema from '@deepseek-ai/schemastery';
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
-import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, initialState, fold, viewOf,
-  sanitize, sanitizeContinuation, parseOptimize, optimizeSystem, lowestEffort,
+import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, OPTIMIZE_SYSTEM, initialState, fold, viewOf,
+  sanitize, sanitizeContinuation, parseOptimize, lowestEffort,
   routeOf, isHuman } from './core.js';
 import { descriptor, continueDescriptor, optimizeDescriptor, modelsDescriptor,
   requestCodec, continueRequestCodec, optimizeRequestCodec, modelsRequestCodec } from './remote.js';
 
-export const inject = ['llm', 'agents', 'sessionProjections', 'typert', 'skills', 'workingDirectory'];
+export const inject = ['llm', 'agents', 'sessionProjections', 'typert'];
 export const Config = Schema.object({
   provider: Schema.string().default('').volatile(),
   model: Schema.string().default('').volatile(),
@@ -265,7 +265,7 @@ export class PromptAssist extends TypertRemoteService {
     return this.track(promise);
   }
 
-  /** Clarify one selected instruction through the /clarify skill; returns a preview only. */
+  /** Rewrite one selected instruction into an unambiguous request; returns a preview only. */
   async optimize(request, signal) {
     optimizeRequestCodec.create().parse(request);
     const { ctx, runtime } = this;
@@ -280,25 +280,11 @@ export class PromptAssist extends TypertRemoteService {
         const route = await this.route('optimize', session, entry.controller.signal);
         if (entry.controller.signal.aborted) return optimizeResult('stale', 'stale');
         if (route.error) return optimizeResult('unavailable', route.error === 'aborted' ? 'stale' : route.error);
-        let cwd;
-        try { cwd = await ctx.workingDirectory.ensure(agent, entry.controller.signal); }
-        catch {
-          if (entry.controller.signal.aborted) return optimizeResult('stale', 'stale');
-          cwd = undefined;
-        }
-        let skill;
-        try { skill = await ctx.skills.get('clarify', { cwd, signal: entry.controller.signal }); }
-        catch {
-          if (entry.controller.signal.aborted) return optimizeResult('stale', 'stale');
-          skill = undefined;
-        }
-        if (entry.controller.signal.aborted) return optimizeResult('stale', 'stale');
-        if (!skill?.content) return optimizeResult('unavailable', 'skill-unavailable');
         let raw = '', finished = false;
         for await (const chunk of ctx.llm.stream({
           provider: route.provider, model: route.model,
           ...(route.effort === undefined ? {} : { reasoningEffort: route.effort }),
-          maxTokens: 8192, system: optimizeSystem(skill.content), tools: [],
+          maxTokens: 8192, system: OPTIMIZE_SYSTEM, tools: [],
           messages: [{ role: 'user', content: [{ type: 'text',
             text: JSON.stringify({ selection: request.text, contextBefore: request.before, contextAfter: request.after }) }] }],
           signal: entry.controller.signal, sessionId: session.id,

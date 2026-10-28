@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
-import { PromptAssist } from '../src/index.js';
+import { PromptAssist, inject } from '../src/index.js';
 import { initialState } from '../src/core.js';
 import { createPreviewController } from '../src/preview-state.js';
 
@@ -15,8 +15,7 @@ function setup(stream, config = {}, extras = {}) {
   const modelCalls = [];
   ctx.provide('agents', { get: id => id === agent.id ? agent : undefined });
   ctx.provide('sessionProjections', { stateOf: (_session, key) => key === 'localPromptAssist' ? state : selection });
-  ctx.provide('skills', extras.skills ?? { get: async () => ({ content: 'SKILL BODY' }) });
-  ctx.provide('workingDirectory', { ensure: async () => '/tmp' });
+  if (extras.skills) ctx.provide('skills', extras.skills);
   ctx.provide('llm', {
     resolveModelInfo: extras.resolveModelInfo ?? (async () => ({ reasoning: { efforts: [{ id: 'low' }] } })),
     stream(options) { calls.push(options); return stream(options); },
@@ -180,15 +179,17 @@ test('continuation refuses a running turn, a mismatched cursor and oversized out
   } finally { await long.ctx.fiber.dispose(); }
 });
 
-test('optimize reads the clarify skill and parses the MODE protocol', async () => {
+test('optimize uses the built-in contract and parses the MODE protocol', async () => {
   const replace = setup(streamOf('MODE: replace\n\n请补充一个最小复现。'));
   try {
     const result = await replace.service.optimize({ sessionId: replace.agent.id, endSeq: 9,
       text: '帮我修一下', before: '上下文', after: '' });
     assert.deepEqual(result, { status: 'ready', reason: 'none', mode: 'replace', text: '请补充一个最小复现。' });
     assert.equal(replace.calls[0].maxTokens, 8192);
-    assert.match(replace.calls[0].system, /SKILL BODY/);
+    assert.match(replace.calls[0].system, /^## Goal/);
+    assert.match(replace.calls[0].system, /One-shot application contract/);
     assert.match(replace.calls[0].system, /MODE: replace/);
+    assert.doesNotMatch(replace.calls[0].system, /\/clarify/i);
     const payload = JSON.parse(replace.calls[0].messages[0].content[0].text);
     assert.equal(payload.selection, '帮我修一下');
     assert.equal(payload.contextBefore, '上下文');
@@ -202,15 +203,26 @@ test('optimize reads the clarify skill and parses the MODE protocol', async () =
   } finally { await questions.ctx.fiber.dispose(); }
 });
 
-test('optimize reports a missing skill and an invalid model output', async () => {
-  const missing = setup(streamOf('MODE: replace\n\n不应到达'), {}, { skills: { get: async () => undefined } });
+test('the Host declares no environment skill-service dependency', () => {
+  assert.ok(!inject.includes('skills'));
+  assert.ok(!inject.includes('workingDirectory'));
+});
+
+test('optimize never reads an environment skill, even when one exists', async () => {
+  let reads = 0;
+  const f = setup(streamOf('MODE: replace\n\n改写结果'), {}, {
+    skills: { get: async () => { reads += 1; return { content: 'MARKER-SKILL-BODY' }; } },
+  });
   try {
-    const result = await missing.service.optimize({ sessionId: missing.agent.id, endSeq: 9,
+    const result = await f.service.optimize({ sessionId: f.agent.id, endSeq: 9,
       text: '优化我', before: '', after: '' });
-    assert.equal(result.status, 'unavailable');
-    assert.equal(result.reason, 'skill-unavailable');
-    assert.equal(missing.calls.length, 0);
-  } finally { await missing.ctx.fiber.dispose(); }
+    assert.equal(result.status, 'ready');
+    assert.equal(reads, 0);
+    assert.doesNotMatch(f.calls[0].system, /MARKER-SKILL-BODY/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('optimize reports an invalid model output', async () => {
   const invalid = setup(streamOf('直接改写，没有模式行'));
   try {
     const result = await invalid.service.optimize({ sessionId: invalid.agent.id, endSeq: 9,

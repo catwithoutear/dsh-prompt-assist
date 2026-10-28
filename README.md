@@ -1,6 +1,6 @@
 # Prompt Preview & History
 
-A DSH plugin that suggests the next user prompt after a completed answer, lets you browse and restore recent prompts with ↑/↓, continues the draft you are typing, and clarifies a selected instruction with `/clarify` — all inside the native composer.
+A DSH plugin that suggests the next user prompt after a completed answer, lets you browse and restore recent prompts with ↑/↓, continues the draft you are typing, and rewrites a selected instruction into an unambiguous request — all inside the native composer.
 
 [中文文档](README_ZH.md)
 
@@ -11,14 +11,14 @@ A DSH plugin that suggests the next user prompt after a completed answer, lets y
 - **Shortcut trigger and automatic mode.** `Trigger prompt prediction` asks for the next prompt when the draft is empty and for a continuation when it is not. `Toggle automatic prompt prediction` switches the post-answer automatic suggestion on or off (on by default, persisted).
 - **Remappable shortcuts.** Both commands are editable under **Settings → General → Shortcuts** with the native recorder. If a default binding conflicts, the plugin still loads and tells you to assign one manually.
 - **Draft continuation.** With text in the composer, the trigger asks for a continuation at the caret. A preview row below the composer shows it; Tab inserts, Esc dismisses, and nothing is sent.
-- **One-click optimization.** Select text (or leave the caret collapsed to optimize the whole draft) and press **Optimize** in the composer tool row. The selected instruction is clarified according to the `/clarify` skill. The result is previewed first and applied only on confirmation, so it can be undone. Blocking ambiguity produces questions instead of a replacement.
+- **One-click optimization.** Select text (or leave the caret collapsed to optimize the whole draft) and press **Optimize** in the composer tool row. The selected instruction is rewritten so its goal, scope and constraints are explicit, without adding requirements the user did not express. The result is previewed first and applied only on confirmation, so it can be undone. Blocking ambiguity produces questions instead of a replacement.
 - **Suggest, never send.** Every result is a preview. Only Tab or **Apply** writes to the draft; the plugin never sends or submits.
 - **Native layout.** The next-prompt preview keeps using the composer's existing overlay seat; continuation and optimization use a row below the composer. The editor DOM is never injected.
 - **Prompt history.** ↑ walks back through recent prompts, ↓ walks forward, and going past the newest entry restores the original draft. A typed prefix filters the history.
 
 ## Compatibility
 
-- DSH `>=0.2.1-rc.2 <0.3.0`, Node.js >= 22.
+- DSH `>=0.2.1-rc.3 <0.3.0`, Node.js >= 22.
 - Disable `dsh-prompt-history` before enabling this plugin. Running both creates duplicate keyboard listeners and overlapping previews.
 - By default the plugin uses the session model and consumes its quota; a configured auxiliary model consumes that model's quota. The plugin adds no credentials of its own.
 - Shortcuts reuse the native DSH registry and persistence. On **web**, DSH only allows `Ctrl+/`, `Ctrl+Shift+,`, and `Ctrl+Shift+.`; `Ctrl+/` belongs to the shortcut page and `Ctrl+Shift+.` to the optional inspector bundle, so the manual trigger defaults to `Ctrl+Shift+,` and the auto-toggle stays unbound (assign it under **Settings → General → Shortcuts**). Desktop is unrestricted and defaults to `Primary+Alt+J` / `Primary+Alt+K` (`Cmd+Option` on macOS).
@@ -40,7 +40,7 @@ To update an existing install: rebuild with `npm run build`, reinstall or re-app
 1. **Next prompt**: wait for an answer to finish. When the session is idle and no input is queued, a grey suggestion appears in the visible, empty composer with the hint `Tab to accept · Esc to dismiss`.
 2. **Manual trigger**: focus the composer and press the trigger shortcut. An empty draft requests the next prompt; a non-empty draft with a collapsed caret requests a continuation at the caret.
 3. **Continuation**: the result appears below the composer. Tab inserts it at the current caret; moving the caret or editing the draft requires a fresh trigger.
-4. **Optimize**: select the text to clarify (or keep the caret collapsed to optimize the whole draft), then press **Optimize** in the tool row:
+4. **Optimize**: select the text to rewrite (or keep the caret collapsed to optimize the whole draft), then press **Optimize** in the tool row:
    - `MODE: replace`: press **Apply** to replace the selection (or the whole draft) or **Cancel**;
    - `MODE: questions`: only the blocking questions are shown; edit the draft and trigger again.
 5. **Automatic mode**: press the toggle shortcut or use the settings page. Automatic requests stop when it is off; manual triggers still work.
@@ -60,18 +60,18 @@ While the session is running, while files or images are attached, or when the co
 
 - **Eligibility.** The next-prompt preview is requested only after a `completed` turn whose final assistant message has text, is not interrupted, and contains no tool calls; the session must be idle with no queued input. Continuation is manual-only. Optimization is button-driven and not tied to turn eligibility, but requires the plain composer state.
 - **Model choice.** By default the plugin uses `modelSelection.next` or `lastUsed`, falling back to the session request header. A configured auxiliary route is validated before every call; an unavailable route produces an actionable error instead of a silent fallback. Next-prompt and continuation use the lowest supported reasoning effort; optimization leaves the effort to the provider.
-- **Context and limits.** Next-prompt sends the last 8 user/assistant text messages (user ≤2,400 and assistant ≤3,200 characters). Continuation sends recent transcript plus the draft prefix/suffix (≤8,000 characters total) and caps output at 160 single-line characters. Optimization sends the selection (≤6,000 characters) and a small context window (≤800 characters on each side); replace output is capped at 6,000 characters and questions at 2,000. Over-limit, timeout, empty output, malformed output, and a missing skill all produce explicit errors.
+- **Context and limits.** Next-prompt sends the last 8 user/assistant text messages (user ≤2,400 and assistant ≤3,200 characters). Continuation sends recent transcript plus the draft prefix/suffix (≤8,000 characters total) and caps output at 160 single-line characters. Optimization sends the selection (≤6,000 characters) and a small context window (≤800 characters on each side); replace output is capped at 6,000 characters and questions at 2,000. Over-limit, timeout, empty output, and malformed output all produce explicit errors.
 - **Filtering.** The next-prompt system prompt and 200-character filter are unchanged. Continuation and optimization have their own validators that reject assistant chatter, UI instructions, and empty results. Optimization output must follow the `MODE:` protocol.
 - **Writes and races.** Every write is checked against the draft revision: continuation also requires the caret to still be where the trigger captured it; whole-draft optimization uses the revision-guarded `insertText`, never the unguarded `setDraft`. Late results, canceled requests, and previews invalidated by editing are never written.
 - **History.** The last 200 human text messages are considered, with consecutive duplicates merged; history is rebuilt from the session log and survives a page refresh.
-- **Safety.** No global overlay, fixed positioning, DOM injection, chat DOM watching, or polling. The preview is a status element in a DSH slot; the Host revalidates the session, turn, model route, and input lengths, and the client cannot choose a model or supply skill content.
+- **Safety.** No global overlay, fixed positioning, DOM injection, chat DOM watching, or polling. The preview is a status element in a DSH slot; the Host revalidates the session, turn, model route, and input lengths, and the client cannot choose a model or change the fixed optimization contract.
 
 ## Development
 
 ```sh
 npm ci
 npm run build       # regenerate lib/client.js from src/
-npm test            # node:test suites, currently 41 tests
+npm test            # node:test suites, currently 43 tests
 npm run check       # syntax-check src/index.js and lib/client.js
 npm pack --dry-run  # inspect the distribution file list
 ```
@@ -80,12 +80,12 @@ Edit only the modules under `src/`. `lib/client.js` is generated by `build.mjs` 
 
 ## Testing
 
-The suite contains 41 tests in four files:
+The suite contains 43 tests in four files:
 
 - `test/core.test.js` — session folding, eligibility, sanitization, route resolution, `MODE:` parsing, history walking, wire validation.
 - `test/preview-state.test.js` — candidate caching, visibility transitions, automatic/manual triggers, cancellation, late results.
 - `test/draft-assist.test.js` — continuation/optimization preview state machine, single-flight, late-drop, errors, cancellation.
-- `test/host.test.js` — the Host service against a real Cordis context with stubbed agents, projections, skills, working directory, and LLM stream.
+- `test/host.test.js` — the Host service against a real Cordis context with stubbed agents, projections, and LLM stream.
 
 The tests cover pure logic, controllers, and the main Host paths. They do not cover the plugin's `apply()` registration, the React client components, native browser events, or actual layout geometry, and they do not prove the quality of real model output. Browser and visual verification are not automated.
 
@@ -93,7 +93,7 @@ The tests cover pure logic, controllers, and the main Host paths. They do not co
 
 ```text
 src/                 hand-written ESM modules
-  index.js           Host entry: Config, projection registration, Typert service, model/skill calls
+  index.js           Host entry: Config, projection registration, Typert service, model calls and the built-in optimization contract
   core.js            shared fold, prompt contracts, validators, route resolution
   remote.js          Typert wire codecs and descriptors
   preview-state.js   next-prompt controller (automatic/manual triggers)
@@ -114,7 +114,7 @@ package.json         exports, distribution whitelist, DSH manifest
 - Suggestion and optimization quality depends on the selected model. The plugin only filters structure and obviously invalid output.
 - On web only the three DSH-allowed shortcut combinations are usable, and two of them belong to official plugins (`shortcuts.open` and the optional inspector); desktop can record any combination. A conflicting default requires a manual shortcut assignment.
 - The continuation/optimization row sits below the composer; its layout, scrolling, and focus behavior rely on DSH composer slots and need re-checking after a DSH upgrade.
-- The `/clarify` skill is provided by the user's environment. When it is missing or renamed, optimization is unavailable and the plugin does not degrade to a generic rewrite.
+- Optimization is self-contained: it uses the plugin's built-in clarification contract and reads nothing from the environment, so the feature does not depend on installed skills.
 - There is no side chat, clipboard feature, second history store, or self-built shortcut system.
 
 ## License

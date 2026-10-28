@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, optimizeSystem,
+import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, OPTIMIZE_SYSTEM,
   browseHistory, selectedModel, routeOf, SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX } from '../src/core.js';
 import { requestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
@@ -97,10 +97,13 @@ test('parseOptimize accepts the MODE protocol, strips fences and enforces limits
   assert.equal(parseOptimize('MODE: replace\n\n按 Tab 应用').reason, 'invalid-output');
   assert.equal(parseOptimize('MODE: replace\n\n我会补一个测试。').reason, 'invalid-output');
 });
-test('the optimize prompt appends the one-shot contract after the skill body', () => {
-  const prompt = optimizeSystem('SKILL-BODY');
-  assert.match(prompt, /^SKILL-BODY/);
-  assert.match(prompt, /One-shot application contract/);
-  assert.match(prompt, /MODE: replace/);
-  assert.match(prompt, /MODE: questions/);
+test('the optimize prompt is self-contained and states the clarification principles', () => {
+  assert.match(OPTIMIZE_SYSTEM, /^## Goal/);
+  assert.match(OPTIMIZE_SYSTEM, /Evidence first/);
+  assert.match(OPTIMIZE_SYSTEM, /blocking ambiguity/i);
+  assert.match(OPTIMIZE_SYSTEM, /No AI boilerplate/);
+  assert.match(OPTIMIZE_SYSTEM, /One-shot application contract/);
+  assert.match(OPTIMIZE_SYSTEM, /MODE: replace/);
+  assert.match(OPTIMIZE_SYSTEM, /MODE: questions/);
+  assert.doesNotMatch(OPTIMIZE_SYSTEM, /\/clarify|clarify skill/i);
 });
