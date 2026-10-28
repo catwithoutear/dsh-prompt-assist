@@ -25,7 +25,6 @@ function makeClient(React) {
   const EMPTY = [];
   const EMPTY_CATALOG = [];
   const EMPTY_CONFIG = { status: 'unavailable', value: undefined };
-  const EMPTY_DRAFT = { kind: '', phase: 'idle', text: '', mode: '', reason: '' };
   const EMPTY_MODELS = { status: 'loading', providers: [] };
   const readAuto = () => {
     const snapshot = configForm?.getSnapshot?.();
@@ -100,6 +99,7 @@ function makeClient(React) {
         if (!bridge) { notices.set('error.unavailable'); return; }
         const span = state.inputActions.captureInsertion();
         if (span.start !== span.end) { notices.set('error.selection'); return; }
+        if (!state.draft.slice(0, span.start).trim()) { notices.set('error.no-prefix'); return; }
         capture = { kind: 'continuation', span, rev: span.draftRev, at: span.start };
         draft.startContinuation({ sessionId, endSeq: state.endSeq,
           prefix: state.draft.slice(0, span.start), suffix: state.draft.slice(span.end) });
@@ -206,14 +206,23 @@ function makeClient(React) {
   display:block;font-size:11px;line-height:18px;opacity:.65;text-align:right;
   white-space:normal;overflow-wrap:anywhere
 }
-.dsh-pa-dock{
-  box-sizing:border-box;display:flex;gap:10px;align-items:flex-start;justify-content:space-between;
-  padding:6px 10px 0 14px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;
-  max-height:180px;overflow:auto
+[data-composer-card]:has([data-prompt-assist-draft]) > [data-composer-overlay]{
+  position:relative;inset:auto;height:auto;order:1;width:100%;min-width:0;pointer-events:auto
 }
-.dsh-pa-dock-text{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;opacity:.8}
-.dsh-pa-dock-actions{display:flex;gap:6px;flex-shrink:0;align-items:flex-start}
-.dsh-pa-dock-hint{font-size:11px;opacity:.65;white-space:nowrap}
+[data-composer-card]:has([data-prompt-assist-draft]) > :last-child{order:2}
+.dsh-pa-draft{
+  box-sizing:border-box;display:flex;flex-direction:column;gap:4px;
+  max-height:220px;overflow:auto;padding:8px 12px 4px 14px;
+  color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px;
+  border-top:.5px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2));
+  pointer-events:auto
+}
+.dsh-pa-draft-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dsh-pa-draft-label{font-weight:500;color:var(--dsw-alias-label-primary)}
+.dsh-pa-draft-hint{font-size:11px;opacity:.65;white-space:nowrap;text-align:right}
+.dsh-pa-draft-text{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;opacity:.8}
+.dsh-pa-draft-actions{display:flex;justify-content:flex-end;gap:6px;flex-shrink:0;padding-bottom:2px}
+.dsh-pa-questions{border-left:2px solid var(--dsw-alias-state-business-primary);padding-left:12px}
 .dsh-pa-button{
   box-sizing:border-box;border:1px solid var(--dsw-alias-border-subtle, rgba(127,127,127,.35));
   background:transparent;color:inherit;font:inherit;font-size:12px;line-height:20px;
@@ -302,6 +311,8 @@ function makeClient(React) {
     apiRef.current = api;
     const assist = React.useMemo(() => createSessionAssist(sessionId), [sessionId]);
     const preview = React.useSyncExternalStore(assist.next.subscribe, assist.next.getSnapshot);
+    const draftPreview = React.useSyncExternalStore(assist.draft.subscribe, assist.draft.getSnapshot);
+    const notice = React.useSyncExternalStore(assist.notices.subscribe, assist.notices.getSnapshot);
     const [visible, setVisible] = React.useState(false);
     const [composing, setComposing] = React.useState(false);
     const selection = useProjection('modelSelection');
@@ -356,8 +367,14 @@ function makeClient(React) {
         auto, request: { sessionId, endSeq: projection?.endSeq } });
     }, [assist, key, valid, allowed, visible, composing, api, auto, projection?.endSeq, sessionId]);
     React.useEffect(() => {
-      assist.draft.sync({ valid: draftValid, visible });
-    }, [assist, draftValid, visible]);
+      // Clarification questions must survive IME composition while the human edits,
+      // but not an empty draft, a running turn, or a closed composer.
+      const keepQuestions = draftPreview.mode === 'questions' && draftPreview.phase === 'ready'
+        && draft !== '' && !removed && phase === 'plain' && !running
+        && projection?.openTurn === null && openState === 'open';
+      assist.draft.sync({ valid: (draftValid && draft !== '') || keepQuestions, visible });
+    }, [assist, draftValid, visible, draftPreview.mode, draftPreview.phase,
+      draft, removed, phase, running, projection?.openTurn, openState]);
     // pause cancels all owned work; React owns the snapshot subscription cleanup.
     React.useEffect(() => () => assist.next.pause(), [assist]);
     const autoRef = React.useRef(auto);
@@ -381,6 +398,10 @@ function makeClient(React) {
         if (!ownEditor(event.target)) return;
         browse.current = null;
         assist.next.pause();
+        // The clarification card stays readable while the human edits the draft.
+        // A pending replacement/continuation is still invalidated by typing.
+        const snapshot = assist.draft.getSnapshot();
+        if (snapshot.mode === 'questions' && snapshot.phase === 'ready') return;
         assist.dismissDraft();
       };
       const startComposition = event => {
@@ -457,12 +478,15 @@ function makeClient(React) {
     // field available to the keyboard handler without re-subscribing.
     const shown = allowed && visible && !composing && preview?.key === key && !preview.pending
       ? preview : null;
+    const draftActive = !shown?.text && (!!notice || draftPreview.phase !== 'idle');
     return h('div', { ref: root, 'data-prompt-assist-owner': sessionId,
-      'data-prompt-assist-ready': shown?.text ? '' : undefined },
+      'data-prompt-assist-ready': shown?.text ? '' : undefined,
+      'data-prompt-assist-draft': draftActive ? '' : undefined },
       shown?.text && h('div', { className: 'dsh-pa-preview', 'data-prompt-assist-preview': '',
         role: 'status', 'aria-live': 'polite' },
         h('span', { className: 'dsh-pa-text' }, shown.text),
-        h('span', { className: 'dsh-pa-hint' }, t('preview.accept'))));
+        h('span', { className: 'dsh-pa-hint' }, t('preview.accept'))),
+      draftActive && h(DraftPreview, { assist, t }));
   }
 
   function useAssist(sessionId) {
@@ -479,50 +503,62 @@ function makeClient(React) {
     );
   }
 
-  function PromptDock(props) {
-    const { sessionId, t } = props;
-    const assist = useAssist(sessionId);
-    const snapshot = React.useSyncExternalStore(
-      assist ? assist.draft.subscribe : noopSubscribe,
-      assist ? assist.draft.getSnapshot : () => EMPTY_DRAFT,
-    );
-    const notice = React.useSyncExternalStore(
-      assist ? assist.notices.subscribe : noopSubscribe,
-      assist ? assist.notices.getSnapshot : () => '',
-    );
-    if (!assist) return null;
+  function DraftPreview({ assist, t }) {
+    const snapshot = React.useSyncExternalStore(assist.draft.subscribe, assist.draft.getSnapshot);
+    const notice = React.useSyncExternalStore(assist.notices.subscribe, assist.notices.getSnapshot);
+    const close = h('button', {
+      type: 'button', className: 'dsh-pa-button',
+      onPointerDown: event => event.preventDefault(),
+      onClick: () => assist.dismissDraft(),
+    }, t('dock.close'));
     if (notice) {
-      return h('div', { className: 'dsh-pa-dock', role: 'status', 'aria-live': 'polite' },
-        h('span', { className: 'dsh-pa-dock-text' }, t(notice)));
+      return h('div', { className: 'dsh-pa-draft', 'data-prompt-assist-draft-panel': '',
+        role: 'status', 'aria-live': 'polite' },
+        h('span', { className: 'dsh-pa-draft-text' }, t(notice)));
     }
     if (snapshot.phase === 'idle') return null;
     if (snapshot.phase === 'pending') {
-      return h('div', { className: 'dsh-pa-dock', role: 'status', 'aria-live': 'polite' },
-        h('span', { className: 'dsh-pa-dock-text' }, t('dock.pending')));
+      return h('div', { className: 'dsh-pa-draft', 'data-prompt-assist-draft-panel': '',
+        role: 'status', 'aria-live': 'polite' },
+        h('span', { className: 'dsh-pa-draft-hint' }, t('dock.pending')));
     }
     if (snapshot.phase === 'error') {
-      return h('div', { className: 'dsh-pa-dock', role: 'alert' },
-        h('span', { className: 'dsh-pa-dock-text dsh-pa-error' }, t(`error.${snapshot.reason}`)),
-        h('span', { className: 'dsh-pa-dock-actions' },
-          h('button', { type: 'button', className: 'dsh-pa-button', onPointerDown: e => e.preventDefault(),
-            onClick: () => assist.dismissDraft() }, t('dock.close'))));
+      return h('div', { className: 'dsh-pa-draft', 'data-prompt-assist-draft-panel': '',
+        role: 'alert', 'data-prompt-assist-optimize-mode': 'error' },
+        h('span', { className: 'dsh-pa-draft-text dsh-pa-error' }, t(`error.${snapshot.reason}`)),
+        h('span', { className: 'dsh-pa-draft-actions' }, close));
     }
     if (snapshot.kind === 'continuation') {
-      return h('div', { className: 'dsh-pa-dock', role: 'status', 'aria-live': 'polite' },
-        h('span', { className: 'dsh-pa-dock-hint' }, `${t('dock.continuation')} · `),
-        h('span', { className: 'dsh-pa-dock-text' }, snapshot.text),
-        h('span', { className: 'dsh-pa-dock-hint' }, t('dock.hint')));
+      return h('div', { className: 'dsh-pa-draft', 'data-prompt-assist-draft-panel': '',
+        'data-prompt-assist-optimize-mode': 'continuation', role: 'status', 'aria-live': 'polite' },
+        h('div', { className: 'dsh-pa-draft-head' },
+          h('span', { className: 'dsh-pa-draft-label' }, t('dock.continuation')),
+          h('span', { className: 'dsh-pa-draft-hint' }, t('dock.hint'))),
+        h('div', { className: 'dsh-pa-draft-text' }, snapshot.text));
     }
-    // Optimize preview: apply is explicit; questions never offer an apply button.
-    return h('div', { className: 'dsh-pa-dock', role: 'status', 'aria-live': 'polite' },
-      snapshot.mode === 'questions' && h('span', { className: 'dsh-pa-dock-hint' }, `${t('dock.questions')} · `),
-      h('span', { className: 'dsh-pa-dock-text' }, snapshot.text),
-      h('span', { className: 'dsh-pa-dock-actions' },
-        snapshot.mode === 'replace' && h('button', { type: 'button', className: 'dsh-pa-button',
-          onPointerDown: e => e.preventDefault(), onClick: () => assist.apply() }, t('dock.apply')),
-        h('button', { type: 'button', className: 'dsh-pa-button', onPointerDown: e => e.preventDefault(),
-          onClick: () => assist.dismissDraft() },
-        snapshot.mode === 'replace' ? t('dock.cancel') : t('dock.close'))));
+    if (snapshot.mode === 'questions') {
+      return h('div', { className: 'dsh-pa-draft dsh-pa-questions',
+        'data-prompt-assist-draft-panel': '', 'data-prompt-assist-optimize-mode': 'questions',
+        role: 'status', 'aria-live': 'polite' },
+        h('div', { className: 'dsh-pa-draft-head' },
+          h('span', { className: 'dsh-pa-draft-label' }, t('dock.questions')),
+          h('span', { className: 'dsh-pa-draft-hint' }, t('dock.questionsHint'))),
+        h('div', { className: 'dsh-pa-draft-text' }, snapshot.text),
+        h('div', { className: 'dsh-pa-draft-actions' }, close));
+    }
+    return h('div', { className: 'dsh-pa-draft', 'data-prompt-assist-draft-panel': '',
+      'data-prompt-assist-optimize-mode': 'replace', role: 'status', 'aria-live': 'polite' },
+      h('div', { className: 'dsh-pa-draft-head' },
+        h('span', { className: 'dsh-pa-draft-label' }, t('dock.optimize')),
+        h('span', { className: 'dsh-pa-draft-hint' }, t('dock.applyHint'))),
+      h('div', { className: 'dsh-pa-draft-text' }, snapshot.text),
+      h('div', { className: 'dsh-pa-draft-actions' },
+        h('button', { type: 'button', className: 'dsh-pa-button',
+          onPointerDown: event => event.preventDefault(),
+          onClick: () => assist.apply() }, t('dock.apply')),
+        h('button', { type: 'button', className: 'dsh-pa-button',
+          onPointerDown: event => event.preventDefault(),
+          onClick: () => assist.dismissDraft() }, t('dock.cancel'))));
   }
 
   function OptimizeButton(props) {
@@ -672,6 +708,7 @@ function makeClient(React) {
         'command.predict': '触发提示词预测', 'command.toggle': '切换自动提示词预测',
         'dock.continuation': '续写', 'dock.hint': 'Tab 插入 · Esc 忽略', 'dock.pending': '正在生成…',
         'dock.apply': '应用', 'dock.cancel': '取消', 'dock.close': '关闭', 'dock.questions': '需要先补充信息',
+        'dock.optimize': '优化预览', 'dock.applyHint': '确认后写回草稿', 'dock.questionsHint': '草稿未修改；补充后重新点击优化',
         'button.optimize': '优化', 'button.optimizeTitle': '把选中文本（无选区时整段草稿）改写成更清晰的指令',
         'settings.title': '提示词助手', 'settings.auto': '自动提示词预测',
         'settings.autoHint': '整轮回答完成后自动生成下一句建议。',
@@ -696,6 +733,7 @@ function makeClient(React) {
         'error.unavailable': '当前不能执行该操作。', 'error.attachments': '带附件的草稿暂不支持续写。',
         'error.selection': '请先取消选区再续写。', 'error.chips': '包含引用内容的草稿暂不支持优化。',
         'error.empty-draft': '请先输入内容。', 'error.caret-moved': '光标已移动，请重新触发。',
+        'error.no-prefix': '把光标放到草稿文字后面再触发续写。',
         'error.save-failed': '设置保存失败，请重试。',
         'notice.auto-on': '自动提示词预测已开启。', 'notice.auto-off': '自动提示词预测已关闭。',
         'error.predict-failed': '提示词预测失败，请重试或检查设置。',
@@ -707,6 +745,7 @@ function makeClient(React) {
         'dock.continuation': 'Continuation', 'dock.hint': 'Tab to insert · Esc to dismiss',
         'dock.pending': 'Generating…', 'dock.apply': 'Apply', 'dock.cancel': 'Cancel',
         'dock.close': 'Close', 'dock.questions': 'More information needed',
+        'dock.optimize': 'Optimization preview', 'dock.applyHint': 'Writes to the draft only after Apply', 'dock.questionsHint': 'Draft unchanged; edit it and run Optimize again',
         'button.optimize': 'Optimize', 'button.optimizeTitle': 'Rewrite the selected prompt (or the whole draft) into a clearer instruction',
         'settings.title': 'Prompt assist', 'settings.auto': 'Automatic prompt prediction',
         'settings.autoHint': 'Generate a next-prompt suggestion after each completed answer.',
@@ -734,6 +773,7 @@ function makeClient(React) {
         'error.selection': 'Clear the selection before requesting a continuation.',
         'error.chips': 'Optimization is unavailable while the draft contains references.',
         'error.empty-draft': 'Type something first.', 'error.caret-moved': 'The caret moved. Trigger again.',
+        'error.no-prefix': 'Place the caret after some draft text to continue.',
         'error.save-failed': 'Saving the setting failed. Try again.',
         'notice.auto-on': 'Automatic prompt prediction is on.', 'notice.auto-off': 'Automatic prompt prediction is off.',
         'error.predict-failed': 'Prompt prediction failed. Try again or check the settings.',
@@ -743,9 +783,6 @@ function makeClient(React) {
       ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
         name: 'conversation.input.overlay', id: 'local-prompt-assist', order: 20, locale: NS,
       }, PromptComposer));
-      ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
-        name: 'conversation.composer.dock', id: 'local-prompt-assist-dock', order: 10, locale: NS,
-      }, PromptDock));
       ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
         name: 'conversation.input.right', id: 'local-prompt-assist-optimize', order: 10, locale: NS,
       }, OptimizeButton));

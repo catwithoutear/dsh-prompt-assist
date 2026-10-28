@@ -27,7 +27,7 @@ Artifacts land in `verification/artifacts/<dsh-version>/` (gitignored):
 
 | Path | Contents |
 |---|---|
-| `screens/*.png` | composer, next-prompt overlay, continuation dock, optimization preview |
+| `screens/*.png` | composer, next-prompt overlay, continuation preview, optimization replace/questions preview |
 | `playwright-report.json` | Playwright JSON report |
 | `test-results/` | failure screenshots and traces (trace retained on failure) |
 | `playwright.log` | runner output |
@@ -57,9 +57,14 @@ node verification/run.mjs \
 - After one completed assistant turn, the automatic next-prompt overlay is
   visible, and its overlay seat shares the front line with the composer
   (`overlay.top` equals `input.top` within 1px).
-- The default web shortcut (`Ctrl+Shift+,`) triggers a continuation preview in
-  the dock.
-- The composer **Optimize** button opens the optimization preview.
+- The default web shortcut (`Ctrl+Shift+,`) triggers a continuation preview
+  inside `[data-composer-card]` (not in the status/dock row).
+- The composer **Optimize** button opens the replace preview with Apply/Cancel;
+  applying writes the draft, cancelling leaves it unchanged. A `MODE: questions`
+  response renders clarification questions inside the card with no Apply action,
+  stays visible while editing, and closes on Close/empty draft/send.
+- A continuation trigger with the caret at the start of the draft shows the
+  no-prefix notice instead of calling the model.
 
 ## What it does not prove
 

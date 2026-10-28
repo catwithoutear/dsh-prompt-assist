@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import {
-  CHAT_REPLY, PREDICT_TEXT, CONTINUATION_TEXT, OPTIMIZE_OUTPUT,
+  CHAT_REPLY, PREDICT_TEXT, CONTINUATION_TEXT, OPTIMIZE_OUTPUT, QUESTIONS_OUTPUT,
 } from './prompts.mjs';
 
 const PORT = Number(process.env.MOCK_PORT || 18090);
@@ -14,6 +14,7 @@ const REPLY = {
   predict: PREDICT_TEXT,
   continuation: CONTINUATION_TEXT,
   optimize: OPTIMIZE_OUTPUT,
+  optimizeQuestions: QUESTIONS_OUTPUT,
 };
 
 const stats = { requests: 0, byKind: {}, startedAt: new Date().toISOString() };
@@ -31,8 +32,12 @@ function classify(body) {
   const system = messages.filter(message => message.role === 'system')
     .map(message => contentText(message.content)).join('\n');
   if (system.includes('You write the next USER message')) return 'predict';
-  if (system.includes("You continue the human's unsent message")) return 'continuation';
-  if (system.includes('One-shot application contract')) return 'optimize';
+  if (system.includes('You are the human writing an unsent message')) return 'continuation';
+  if (system.includes('One-shot application contract')) {
+    const draft = messages.filter(message => message.role === 'user')
+      .map(message => contentText(message.content)).join('\n');
+    return draft.includes('那个东西') ? 'optimizeQuestions' : 'optimize';
+  }
   return 'chat';
 }
 

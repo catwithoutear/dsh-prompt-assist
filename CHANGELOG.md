@@ -4,9 +4,14 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Continuation and optimization previews now render inside the composer card (below the editor, above the tool row) instead of the ambient dock row shared with the context/token status meter. `MODE: questions` is presented as a distinct clarification panel with a Close action and no Apply action.
+- The continuation prompt now explicitly frames the model as the human writer, forbids answering as the assistant, and the client rejects a continuation request when the caret has no text before it.
+
 ### Added
 
-- Docker + Playwright verification harness (`verification/`): installs the packed tarball into a real DSH web host, then checks composer boot, the automatic next-prompt overlay geometry, the continuation shortcut, and the optimization preview against a deterministic local model stub. Screenshots, reports, profile/config dumps, and model request logs are retained.
+- Docker + Playwright verification harness (`verification/`): installs the packed tarball into a real DSH web host, then checks composer boot, the automatic next-prompt overlay geometry, the continuation shortcut, and both optimization preview modes against a deterministic local model stub. Screenshots, reports, profile/config dumps, and model request logs are retained.
 - Explicit verified-DSH-version support: `verification/dsh-versions.json` lists the exact versions exercised by the matrix; `verify:versions` enforces consistency with `engines.dsh`; CI runs the matrix; a daily watcher reports new releases and opens a tracking issue when verification is needed; the publish workflow rejects an inconsistent matrix.
 
 ## [1.3.5] - 2026-10-28

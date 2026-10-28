@@ -10,10 +10,10 @@ A DSH plugin that suggests the next user prompt after a completed answer, lets y
 - **Configurable auxiliary model.** Choose any provider/model already configured in DSH under **Settings → Prompt assist**. Leave it empty to follow the session model. The plugin stores no extra API keys and never silently falls back.
 - **Shortcut trigger and automatic mode.** `Trigger prompt prediction` asks for the next prompt when the draft is empty and for a continuation when it is not. `Toggle automatic prompt prediction` switches the post-answer automatic suggestion on or off (on by default, persisted).
 - **Remappable shortcuts.** Both commands are editable under **Settings → General → Shortcuts** with the native recorder. If a default binding conflicts, the plugin still loads and tells you to assign one manually.
-- **Draft continuation.** With text in the composer, the trigger asks for a continuation at the caret. A preview row below the composer shows it; Tab inserts, Esc dismisses, and nothing is sent.
+- **Draft continuation.** With text in the composer, the trigger asks for a continuation at the caret. A preview panel inside the composer card shows it; Tab inserts, Esc dismisses, and nothing is sent.
 - **One-click optimization.** Select text (or leave the caret collapsed to optimize the whole draft) and press **Optimize** in the composer tool row. The selected instruction is rewritten so its goal, scope and constraints are explicit, without adding requirements the user did not express. The result is previewed first and applied only on confirmation, so it can be undone. Blocking ambiguity produces questions instead of a replacement.
 - **Suggest, never send.** Every result is a preview. Only Tab or **Apply** writes to the draft; the plugin never sends or submits.
-- **Native layout.** The next-prompt preview keeps using the composer's existing overlay seat; continuation and optimization use a row below the composer. The editor DOM is never injected.
+- **Native layout.** The next-prompt preview keeps using the composer's existing overlay seat; continuation and optimization use the same card-internal preview area, below the editor and above the tool row. The editor DOM is never injected.
 - **Prompt history.** ↑ walks back through recent prompts, ↓ walks forward, and going past the newest entry restores the original draft. A typed prefix filters the history.
 
 ## Compatibility
@@ -40,7 +40,7 @@ To update an existing install: rebuild with `npm run build`, reinstall or re-app
 
 1. **Next prompt**: wait for an answer to finish. When the session is idle and no input is queued, a grey suggestion appears in the visible, empty composer with the hint `Tab to accept · Esc to dismiss`.
 2. **Manual trigger**: focus the composer and press the trigger shortcut. An empty draft requests the next prompt; a non-empty draft with a collapsed caret requests a continuation at the caret.
-3. **Continuation**: the result appears below the composer. Tab inserts it at the current caret; moving the caret or editing the draft requires a fresh trigger.
+3. **Continuation**: the result appears inside the composer card. Tab inserts it at the current caret; moving the caret or editing the draft requires a fresh trigger.
 4. **Optimize**: select the text to rewrite (or keep the caret collapsed to optimize the whole draft), then press **Optimize** in the tool row:
    - `MODE: replace`: press **Apply** to replace the selection (or the whole draft) or **Cancel**;
    - `MODE: questions`: only the blocking questions are shown; edit the draft and trigger again.
@@ -116,7 +116,7 @@ package.json         exports, distribution whitelist, DSH manifest
 
 - Suggestion and optimization quality depends on the selected model. The plugin only filters structure and obviously invalid output.
 - On web only the three DSH-allowed shortcut combinations are usable, and two of them belong to official plugins (`shortcuts.open` and the optional inspector); desktop can record any combination. A conflicting default requires a manual shortcut assignment.
-- The continuation/optimization row sits below the composer; its layout, scrolling, and focus behavior rely on DSH composer slots and need re-checking after a DSH upgrade.
+- The continuation/optimization preview sits inside the composer card; its layout, scrolling, and focus behavior rely on the DSH composer overlay slot and need re-checking after a DSH upgrade.
 - Optimization is self-contained: it uses the plugin's built-in clarification contract and reads nothing from the environment, so the feature does not depend on installed skills.
 - There is no side chat, clipboard feature, second history store, or self-built shortcut system.
 
