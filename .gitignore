@@ -8,3 +8,7 @@ coverage/
 
 # Local installation and interactive validation notes.
 /VERIFICATION.md
+
+# Verification harness run artifacts.
+/verification/artifacts/
+/verification/.cache/

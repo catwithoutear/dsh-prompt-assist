@@ -1,0 +1,104 @@
+name: Verify plugin against DSH versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      dsh_version:
+        description: Exact DSH version to verify (leave empty for the whole matrix)
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'lib/client.js'
+      - 'build.mjs'
+      - 'cordis.patch.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.dockerignore'
+      - 'verification/**'
+      - '.github/workflows/verify.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Build version matrix
+        id: matrix
+        env:
+          DSH_VERSION_INPUT: ${{ inputs.dsh_version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const doc = JSON.parse(fs.readFileSync("verification/dsh-versions.json", "utf8"));
+            const raw = process.env.DSH_VERSION_INPUT || "";
+            const input = raw.trim();
+            if (input && !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(input)) {
+              console.error(`DSH ${input} is not an exact version.`);
+              process.exit(1);
+            }
+            // A dispatch may target a candidate version that is not in the
+            // matrix yet, so maintainers can produce artifacts before editing
+            // dsh-versions.json. The default matrix always comes from the file.
+            const versions = input ? [input] : doc.versions;
+            if (!Array.isArray(versions) || versions.length === 0) {
+              console.error("No DSH versions to verify; add one to verification/dsh-versions.json.");
+              process.exit(1);
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ dsh: versions })}\n`);
+          '
+
+  verify:
+    needs: versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build verification image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: verification/Dockerfile
+          load: true
+          tags: dsh-prompt-assist-verify:${{ matrix.dsh }}
+          build-args: |
+            DSH_VERSION=${{ matrix.dsh }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Playwright verification
+        env:
+          DSH_VERSION: ${{ matrix.dsh }}
+        run: |
+          mkdir -p "verification/artifacts/$DSH_VERSION"
+          docker run --rm --shm-size=2g \
+            --volume "$PWD/verification/artifacts/$DSH_VERSION:/artifacts" \
+            "dsh-prompt-assist-verify:$DSH_VERSION"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ matrix.dsh }}
+          path: verification/artifacts/${{ matrix.dsh }}
+          if-no-files-found: error

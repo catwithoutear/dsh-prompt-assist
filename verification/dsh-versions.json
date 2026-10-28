@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "description": "Exact @deepseek-ai/dsh versions exercised by verification/. Add a version only after the matching Docker matrix run is green. The lowest entry must equal the lower bound of package.json engines.dsh.",
+  "versions": [
+    "0.2.1-rc.3",
+    "0.2.1-rc.4"
+  ]
+}

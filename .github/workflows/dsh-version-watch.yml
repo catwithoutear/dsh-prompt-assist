@@ -1,0 +1,92 @@
+name: Watch DSH versions
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Check the support matrix against npm
+        id: check
+        shell: bash
+        run: |
+          set +e
+          node verification/check-dsh-versions.mjs \
+            --json-out dsh-version-result.json \
+            --summary-file dsh-version-summary.md
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ -f dsh-version-summary.md ]; then
+            cat dsh-version-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+
+      - name: Open or refresh the support tracking issue
+        if: steps.check.outputs.code == '1'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('dsh-version-summary.md', 'utf8');
+            const result = JSON.parse(fs.readFileSync('dsh-version-result.json', 'utf8'));
+            const title = 'DSH version support: new release needs verification';
+            const { owner, repo } = context.repo;
+            const versions = [...result.newVersions, ...result.newerOutsideRange];
+            const body = [
+              summary,
+              `New versions: ${versions.map(version => `\`${version}\``).join(', ')}.`,
+              `Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+            ].join('\n\n');
+            const open = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const existing = open.data.find(issue => issue.title === title && !issue.pull_request);
+            if (existing) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body });
+            }
+
+      - name: Close the support issue when the matrix is current
+        if: steps.check.outputs.code == '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'DSH version support: new release needs verification';
+            const { owner, repo } = context.repo;
+            const open = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', per_page: 100,
+            });
+            for (const issue of open.data.filter(item => item.title === title && !item.pull_request)) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: 'The DSH support matrix is current again; closing this tracking issue.',
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: issue.number, state: 'closed',
+              });
+            }
+
+      - name: Fail when the matrix needs attention
+        if: steps.check.outputs.code != '0'
+        run: |
+          echo "::error::DSH support matrix is not current (check exit ${{ steps.check.outputs.code }}); see the job summary."
+          exit 1

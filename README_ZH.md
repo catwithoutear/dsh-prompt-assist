@@ -19,6 +19,7 @@
 ## 兼容性
 
 - DSH `>=0.2.1-rc.3 <0.3.0`，Node.js >= 22。
+- 已验证的精确 DSH 版本列在 [`verification/dsh-versions.json`](https://github.com/catwithoutear/dsh-prompt-assist/blob/main/verification/dsh-versions.json)，由 [`verification/`](https://github.com/catwithoutear/dsh-prompt-assist/blob/main/verification/README.md) 实际执行。`engines.dsh` 范围与该列表必须保持同步；范围内更新的 DSH 版本只有在矩阵通过后才算支持。
 - 启用本插件前先停用 `dsh-prompt-history`。两者同时运行会产生重复的键盘监听和重叠的预览。
 - 默认使用会话已选模型并消耗该模型额度；配置辅助模型后消耗所选模型额度。插件本身不新增凭据。
 - 快捷键复用 DSH 原生注册与持久化。DSH 对 **web** 只允许 `Ctrl+/`、`Ctrl+Shift+,`、`Ctrl+Shift+.` 三个组合；`Ctrl+/` 属于快捷键页、`Ctrl+Shift+.` 属于可选的 inspector 插件，因此手动触发默认 `Ctrl+Shift+,`，自动预测开关在 web 上默认不绑定（可在 **设置 → 通用 → 快捷键** 手动指定）。桌面端不受此限，默认 `Primary+Alt+J` / `Primary+Alt+K`（macOS 上为 Cmd+Option）。
@@ -74,6 +75,7 @@ npm run build       # 从 src/ 重新生成 lib/client.js
 npm test            # node:test，当前 43 项
 npm run check       # 语法检查 src/index.js 与 lib/client.js
 npm pack --dry-run  # 查看分发文件清单
+npm run verify:docker  # 对已验证的 DSH 版本执行 Docker + Playwright 检查
 ```
 
 只修改 `src/` 下的模块。`lib/client.js` 由 `build.mjs` 生成，不要手改。构建是幂等的：源码不变时产物逐字节一致。
@@ -87,7 +89,7 @@ npm pack --dry-run  # 查看分发文件清单
 - `test/draft-assist.test.js` — 续写/优化预览状态机、单飞、迟到丢弃、错误与取消。
 - `test/host.test.js` — 真实 Cordis 上下文中的 Host 服务，桩掉 agents、投影和 LLM 流。
 
-测试覆盖纯逻辑、控制器与 Host 主路径；不覆盖插件的 `apply()` 注册、React 客户端组件、浏览器原生事件或实际布局几何，也不证明真实模型输出质量。浏览器与视觉验证未自动化。
+测试覆盖纯逻辑、控制器与 Host 主路径；不覆盖插件的 `apply()` 注册、React 客户端组件、浏览器原生事件或实际布局几何，也不证明真实模型输出质量。`verification/` 中的 Docker 测试覆盖 web 端的核心流程（composer、下一句 overlay、续写、优化），使用确定性模型桩；不覆盖桌面外壳与真实模型行为。
 
 ## 项目布局
 
@@ -101,6 +103,7 @@ src/                 手写 ESM 模块
   client-entry.js    React 输入框 UI、设置页、快捷键、槽位与 CSS
 lib/client.js        build.mjs 生成的浏览器产物（提交入库）
 test/                node:test 测试与 Harness 解析钩子
+verification/        Docker + Playwright 部署与 UI 检查；DSH 支持矩阵
 locale/              插件标题与描述元数据
 build.mjs            从 src/ 构建 lib/client.js
 cordis.patch.yml     插件的 bundle 插入配置
