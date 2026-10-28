@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, OPTIMIZE_SYSTEM,
-  browseHistory, selectedModel, routeOf, SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX } from '../src/core.js';
+  browseHistory, selectedModel, routeOf, SYSTEM, CONTINUE_SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX } from '../src/core.js';
 import { requestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
 const user = text => ({ role: 'user', source: { kind: 'user-rpc' }, content: [{ type: 'text', text }] });
@@ -83,6 +83,11 @@ test('routeOf prefers the configured auxiliary route and falls back to the sessi
 test('continuation text keeps a useful single line and rejects assistant or UI wording', () => {
   assert.equal(sanitizeContinuation('并补一个回归测试。'), '并补一个回归测试。');
   assert.equal(sanitizeContinuation('“请补充错误处理。”'), '请补充错误处理。');
+  assert.match(CONTINUE_SYSTEM, /You are the human/);
+  assert.match(CONTINUE_SYSTEM, /Never answer as the assistant/);
+  assert.equal(sanitizeContinuation('以下是我的日志，请帮我分析。'), '以下是我的日志，请帮我分析。');
+  assert.equal(sanitizeContinuation('Let me check that.'), 'Let me check that.');
+  assert.equal(sanitizeContinuation('以下是修改后的版本。'), '以下是修改后的版本。');
   for (const text of ['', '第一行\n第二行', '按 Tab 插入', '我会补测试。', '```js', 'x'.repeat(CONTINUE_MAX + 1)])
     assert.equal(sanitizeContinuation(text), '', text);
 });
