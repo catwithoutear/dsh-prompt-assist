@@ -1,6 +1,6 @@
 {
   "name": "@catwithoutear/dsh-prompt-assist",
-  "version": "1.3.6-rc.1",
+  "version": "1.3.6-rc.2",
   "description": "Next prompt previews, draft continuation and one-click instruction rewriting with Up/Down history, a configurable auxiliary model and remappable shortcuts.",
   "type": "module",
   "license": "MIT",

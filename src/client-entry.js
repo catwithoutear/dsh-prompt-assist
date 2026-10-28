@@ -611,6 +611,7 @@ function makeClient(React) {
     const provider = typeof value.provider === 'string' ? value.provider : '';
     const model = typeof value.model === 'string' ? value.model : '';
     const auto = value.autoPredict !== false;
+    const optimizeStrategyValue = value.optimizeStrategy === 'clarify' ? 'clarify' : 'expand';
     const providerEntry = models.providers?.find(item => item.id === provider);
     const providers = models.providers ?? [];
     const shortcutRows = (catalog ?? [])
@@ -662,6 +663,18 @@ function makeClient(React) {
           models.status === 'error' && h('span', { className: 'dsh-pa-desc dsh-pa-inline-error' }, translate('settings.modelsError')),
           models.status === 'ready' && providers.length === 0
             && h('span', { className: 'dsh-pa-desc' }, translate('settings.modelsEmpty')))),
+      h('section', { className: 'dsh-pa-group' },
+        h('h3', { className: 'dsh-pa-group-title' }, translate('settings.group.optimize')),
+        h('div', { className: 'dsh-pa-card' },
+          h('div', { className: 'dsh-pa-field' },
+            h('span', { className: 'dsh-pa-field-label' }, translate('settings.optimizeStrategy')),
+            h('span', { className: 'dsh-pa-select-wrap' },
+              h('select', { className: 'dsh-pa-select', value: optimizeStrategyValue,
+                'aria-label': translate('settings.optimizeStrategy'),
+                onChange: event => { setField('optimizeStrategy', event.target.value); } },
+                h('option', { value: 'clarify' }, translate('settings.optimizeClarify')),
+                h('option', { value: 'expand' }, translate('settings.optimizeExpand'))))),
+          h('span', { className: 'dsh-pa-desc' }, translate('settings.optimizeHint')))),
       h('section', { className: 'dsh-pa-group' },
         h('h3', { className: 'dsh-pa-group-title' }, translate('settings.group.shortcuts')),
         shortcutRows.map(row => h('div', { key: row.id, className: 'dsh-pa-row' },
@@ -720,6 +733,9 @@ function makeClient(React) {
         'settings.group.automation': '自动预测', 'settings.group.model': '辅助模型', 'settings.group.shortcuts': '快捷键',
         'settings.modelRow': '模型', 'settings.modelDefault': '使用提供商默认模型',
         'settings.modelHint': '默认跟随会话模型；选择其他模型后，下一句、续写与优化都用它生成。',
+        'settings.group.optimize': '优化策略', 'settings.optimizeStrategy': '优化方向',
+        'settings.optimizeClarify': '澄清优化', 'settings.optimizeExpand': '忠实扩写',
+        'settings.optimizeHint': '澄清优化只消除歧义，几乎不改写；忠实扩写会调整用词、补出草稿已经蕴含的细节，但不会新增目标或验收标准。',
         'settings.followSession': '恢复跟随会话模型',
         'settings.loading': '正在读取模型列表…', 'settings.modelsError': '模型列表读取失败。',
         'settings.modelsEmpty': '没有可用的模型。', 'settings.unbound': '未绑定',
@@ -757,6 +773,9 @@ function makeClient(React) {
         'settings.group.automation': 'Automation', 'settings.group.model': 'Auxiliary model', 'settings.group.shortcuts': 'Shortcuts',
         'settings.modelRow': 'Model', 'settings.modelDefault': 'Use the provider default',
         'settings.modelHint': 'Follows the session model by default; when another model is selected it also generates previews, continuations and optimizations.',
+        'settings.group.optimize': 'Optimization strategy', 'settings.optimizeStrategy': 'Direction',
+        'settings.optimizeClarify': 'Clarify only', 'settings.optimizeExpand': 'Faithful expand',
+        'settings.optimizeHint': 'Clarify only removes ambiguity and barely rewrites. Faithful expand improves wording and makes already-implied details explicit without adding goals or acceptance criteria.',
         'settings.followSession': 'Use the session model',
         'settings.loading': 'Loading models…', 'settings.modelsError': 'Could not load the model list.',
         'settings.modelsEmpty': 'No models are available.', 'settings.unbound': 'Unbound',

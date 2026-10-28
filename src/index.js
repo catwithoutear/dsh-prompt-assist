@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import Schema from '@deepseek-ai/schemastery';
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
-import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, OPTIMIZE_SYSTEM, initialState, fold, viewOf,
+import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY,
+  optimizeSystem, continueUserMessage, readVolatile, initialState, fold, viewOf,
   sanitize, sanitizeContinuation, parseOptimize, lowestEffort,
   routeOf, isHuman } from './core.js';
 import { descriptor, continueDescriptor, optimizeDescriptor, modelsDescriptor,
@@ -12,6 +13,7 @@ export const Config = Schema.object({
   provider: Schema.string().default('').volatile(),
   model: Schema.string().default('').volatile(),
   autoPredict: Schema.boolean().default(true).volatile(),
+  optimizeStrategy: Schema.union(OPTIMIZE_STRATEGIES).default(DEFAULT_OPTIMIZE_STRATEGY).volatile(),
 });
 const PreviewView = z.object({ history: z.array(z.string()), endSeq: z.number().int(),
   eligible: z.boolean(), openTurn: z.number().nullable() });
@@ -234,7 +236,7 @@ export class PromptAssist extends TypertRemoteService {
           ...(route.effort === undefined ? {} : { reasoningEffort: route.effort }),
           maxTokens: 256, system: CONTINUE_SYSTEM, tools: [],
           messages: [{ role: 'user', content: [{ type: 'text',
-            text: JSON.stringify({ transcript: state.recent, prefix: request.prefix, suffix: request.suffix }) }] }],
+            text: continueUserMessage({ transcript: state.recent, prefix: request.prefix, suffix: request.suffix }) }] }],
           signal: entry.controller.signal, sessionId: session.id,
         })) {
           if (entry.controller.signal.aborted) return reasonResult('stale', 'stale');
@@ -284,7 +286,7 @@ export class PromptAssist extends TypertRemoteService {
         for await (const chunk of ctx.llm.stream({
           provider: route.provider, model: route.model,
           ...(route.effort === undefined ? {} : { reasoningEffort: route.effort }),
-          maxTokens: 8192, system: OPTIMIZE_SYSTEM, tools: [],
+          maxTokens: 8192, system: optimizeSystem(readVolatile(this.config?.optimizeStrategy)), tools: [],
           messages: [{ role: 'user', content: [{ type: 'text',
             text: JSON.stringify({ selection: request.text, contextBefore: request.before, contextAfter: request.after }) }] }],
           signal: entry.controller.signal, sessionId: session.id,

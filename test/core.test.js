@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, OPTIMIZE_SYSTEM,
+  OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY, optimizeStrategy, optimizeSystem,
+  continueUserMessage,
   browseHistory, selectedModel, routeOf, SYSTEM, CONTINUE_SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX } from '../src/core.js';
 import { requestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
@@ -83,11 +85,13 @@ test('routeOf prefers the configured auxiliary route and falls back to the sessi
 test('continuation text keeps a useful single line and rejects assistant or UI wording', () => {
   assert.equal(sanitizeContinuation('并补一个回归测试。'), '并补一个回归测试。');
   assert.equal(sanitizeContinuation('“请补充错误处理。”'), '请补充错误处理。');
-  assert.match(CONTINUE_SYSTEM, /You are the human/);
-  assert.match(CONTINUE_SYSTEM, /Never answer as the assistant/);
+  assert.match(CONTINUE_SYSTEM, /text-completion engine/);
+  assert.match(CONTINUE_SYSTEM, /If your output could be the assistant's next message, it is wrong/);
   assert.equal(sanitizeContinuation('以下是我的日志，请帮我分析。'), '以下是我的日志，请帮我分析。');
   assert.equal(sanitizeContinuation('Let me check that.'), 'Let me check that.');
   assert.equal(sanitizeContinuation('以下是修改后的版本。'), '以下是修改后的版本。');
+  assert.equal(sanitizeContinuation('<CURSOR>，并补一个测试。'), '，并补一个测试。');
+  assert.equal(sanitizeContinuation('<DRAFT>，并补一个测试。</DRAFT>'), '，并补一个测试。');
   for (const text of ['', '第一行\n第二行', '按 Tab 插入', '我会补测试。', '```js', 'x'.repeat(CONTINUE_MAX + 1)])
     assert.equal(sanitizeContinuation(text), '', text);
 });
@@ -111,4 +115,27 @@ test('the optimize prompt is self-contained and states the clarification princip
   assert.match(OPTIMIZE_SYSTEM, /MODE: replace/);
   assert.match(OPTIMIZE_SYSTEM, /MODE: questions/);
   assert.doesNotMatch(OPTIMIZE_SYSTEM, /\/clarify|clarify skill/i);
+});
+test('optimization strategy selects the faithful-expand contract', () => {
+  assert.deepEqual(OPTIMIZE_STRATEGIES, ['clarify', 'expand']);
+  assert.equal(DEFAULT_OPTIMIZE_STRATEGY, 'expand');
+  assert.equal(optimizeStrategy(undefined), 'expand');
+  assert.equal(optimizeStrategy('bogus'), 'expand');
+  assert.equal(optimizeStrategy('expand'), 'expand');
+  assert.match(optimizeSystem('clarify'), /Minimal completion/);
+  assert.match(optimizeSystem('expand'), /Enrichment principles/);
+  assert.match(optimizeSystem('expand'), /Rewrite, do not echo/);
+  assert.match(optimizeSystem('expand'), /Do not add goals/);
+  assert.match(optimizeSystem('expand'), /MODE: replace/);
+});
+test('the continuation request quotes the draft and marks the caret', () => {
+  const text = continueUserMessage({
+    transcript: [{ role: 'user', text: '请检查修复' }, { role: 'assistant', text: '已修复' }],
+    prefix: '先按 P0 收敛',
+    suffix: '，然后开 change',
+  });
+  assert.match(text, /Human: 请检查修复/);
+  assert.match(text, /Assistant: 已修复/);
+  assert.match(text, /先按 P0 收敛<CURSOR>，然后开 change/);
+  assert.match(text, /Continue after <CURSOR>/);
 });

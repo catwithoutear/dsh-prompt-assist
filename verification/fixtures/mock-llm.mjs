@@ -32,7 +32,7 @@ function classify(body) {
   const system = messages.filter(message => message.role === 'system')
     .map(message => contentText(message.content)).join('\n');
   if (system.includes('You write the next USER message')) return 'predict';
-  if (system.includes('You are the human writing an unsent message')) return 'continuation';
+  if (system.includes('text-completion engine')) return 'continuation';
   if (system.includes('One-shot application contract')) {
     const draft = messages.filter(message => message.role === 'user')
       .map(message => contentText(message.content)).join('\n');
