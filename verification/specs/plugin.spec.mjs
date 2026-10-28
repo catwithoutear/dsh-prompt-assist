@@ -48,16 +48,19 @@ async function openComposer() {
   return composer;
 }
 
-async function clearComposer(composer) {
+async function setComposerText(composer, text) {
   await composer.click();
+  await expect(composer).toBeFocused();
   await page.keyboard.press('Control+A');
   await page.keyboard.press('Backspace');
-}
-
-async function setComposerText(composer, text) {
-  await clearComposer(composer);
+  await expect(composer).toHaveText('');
   await page.keyboard.insertText(text);
-  await expect(composer).toHaveText(text);
+  try {
+    await expect(composer).toHaveText(text, { timeout: 5_000 });
+  } catch {
+    await composer.fill(text);
+    await expect(composer).toHaveText(text);
+  }
 }
 
 test.beforeAll(async ({ browser }) => {
