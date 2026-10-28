@@ -44,4 +44,10 @@ jobs:
 
       # package.json prepack already runs build, check, and all tests.
       - name: Publish with npm Trusted Publishing
-        run: npm publish --access public
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag=latest
+          if [[ "$version" == *-* ]]; then tag=next; fi
+          echo "publishing $version with dist-tag $tag"
+          npm publish --access public --tag "$tag"
