@@ -39,6 +39,9 @@ jobs:
       - name: Install all dependencies
         run: npm ci --include=dev
 
+      - name: Verify DSH support matrix is internally consistent
+        run: npm run verify:versions
+
       # package.json prepack already runs build, check, and all tests.
       - name: Publish with npm Trusted Publishing
         run: npm publish --access public

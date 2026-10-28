@@ -2,6 +2,13 @@
 
 All notable changes to this plugin are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Docker + Playwright verification harness (`verification/`): installs the packed tarball into a real DSH web host, then checks composer boot, the automatic next-prompt overlay geometry, the continuation shortcut, and the optimization preview against a deterministic local model stub. Screenshots, reports, profile/config dumps, and model request logs are retained.
+- Explicit verified-DSH-version support: `verification/dsh-versions.json` lists the exact versions exercised by the matrix; `verify:versions` enforces consistency with `engines.dsh`; CI runs the matrix; a daily watcher reports new releases and opens a tracking issue when verification is needed; the publish workflow rejects an inconsistent matrix.
+
 ## [1.3.5] - 2026-10-28
 
 ### Changed

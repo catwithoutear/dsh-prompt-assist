@@ -1,0 +1,13 @@
+{
+  "name": "@catwithoutear/dsh-prompt-assist-verification",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Containerized deployment and UI verification for dsh-prompt-assist. Not published.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@playwright/test": "1.60.0"
+  }
+}

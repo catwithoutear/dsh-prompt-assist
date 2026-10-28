@@ -1,0 +1,15 @@
+.git
+.github
+.worktree
+.changes
+.agents
+node_modules
+**/node_modules
+verification/artifacts
+verification/.cache
+coverage
+*.tgz
+*.log
+.docker-config
+VERIFICATION.md
+AGENTS.md

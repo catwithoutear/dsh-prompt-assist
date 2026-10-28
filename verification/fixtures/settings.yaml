@@ -1,0 +1,25 @@
+# Fixture settings for a fresh DSH_HOME. dsh-settings imports this legacy
+# settings.yaml once at startup and writes the sections into the profile patch.
+#
+# welcomeNoticeVersion is the notice version shipped by the pinned DSH version;
+# the Playwright spec also dismisses the notice if a newer DSH changes it.
+#
+# The mock route is an OpenAI-compatible local endpoint. It needs no real
+# credentials: MOCK_API_KEY is a fixture value and the stub ignores it.
+ui-onboarding:
+  welcomeNoticeVersion: 2026-09-28.1
+llm-pi-ai:
+  providers:
+    mock:
+      displayName: Mock
+      apiKeyEnv: MOCK_API_KEY
+      api: openai-completions
+      baseURL: http://127.0.0.1:18090/v1
+      models:
+        - id: mock-1
+          name: Mock 1
+          contextWindow: 64000
+          maxTokens: 8192
+agent-default-model:
+  provider: mock
+  model: mock-1
