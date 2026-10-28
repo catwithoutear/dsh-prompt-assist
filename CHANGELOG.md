@@ -4,6 +4,8 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.3.6-rc.1] - 2026-10-28
+
 ### Changed
 
 - Continuation and optimization previews now render inside the composer card (below the editor, above the tool row) instead of the ambient dock row shared with the context/token status meter. `MODE: questions` is presented as a distinct clarification panel with a Close action and no Apply action.
