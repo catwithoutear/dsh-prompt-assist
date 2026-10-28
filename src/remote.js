@@ -13,7 +13,7 @@ const keys = value => Object.keys(value);
 const isText = value => typeof value === 'string';
 const isSeq = value => Number.isSafeInteger(value) && value >= 0;
 const STATUSES = ['ready', 'unavailable', 'stale', 'error'];
-const REASONS = ['none', 'no-model', 'model-unavailable', 'skill-unavailable',
+const REASONS = ['none', 'no-model', 'model-unavailable',
   'invalid-output', 'limit', 'timeout', 'provider-error', 'empty', 'stale'];
 
 export const requestCodec = codec('PromptAssistRequest', {
@@ -113,7 +113,7 @@ export const optimizeDescriptor = {
   invocation: { kind: 'direct' },
   parameters: [{ name: 'request', wire: 'optimizeRequest', source: 'json', codec: optimizeRequestCodec }],
   cancellation: { parameter: 'signal' }, result: optimizeResultCodec,
-  description: 'Clarify and optimize one selected draft instruction through the /clarify skill; never applies it.',
+  description: 'Rewrite one selected draft instruction into an unambiguous request; never applies it.',
 };
 export const modelsDescriptor = {
   id: '@catwithoutear/dsh-prompt-assist#localPromptAssist/listModels',
