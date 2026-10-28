@@ -11,7 +11,7 @@ A DSH plugin that suggests the next user prompt after a completed answer, lets y
 - **Shortcut trigger and automatic mode.** `Trigger prompt prediction` asks for the next prompt when the draft is empty and for a continuation when it is not. `Toggle automatic prompt prediction` switches the post-answer automatic suggestion on or off (on by default, persisted).
 - **Remappable shortcuts.** Both commands are editable under **Settings → General → Shortcuts** with the native recorder. If a default binding conflicts, the plugin still loads and tells you to assign one manually.
 - **Draft continuation.** With text in the composer, the trigger asks for a continuation at the caret. A preview panel inside the composer card shows it; Tab inserts, Esc dismisses, and nothing is sent.
-- **One-click optimization.** Select text (or leave the caret collapsed to optimize the whole draft) and press **Optimize** in the composer tool row. The selected instruction is rewritten so its goal, scope and constraints are explicit, without adding requirements the user did not express. The result is previewed first and applied only on confirmation, so it can be undone. Blocking ambiguity produces questions instead of a replacement.
+- **One-click optimization.** Select text (or leave the caret collapsed to optimize the whole draft) and press **Optimize** in the composer tool row. The selected instruction is rewritten so its goal, scope and constraints are explicit, without adding requirements the user did not express. The result is previewed first and applied only on confirmation, so it can be undone. Blocking ambiguity produces questions instead of a replacement. **Settings → Prompt assist → Optimization strategy** defaults to **Faithful expand** (improve wording and make already-implied details explicit); choose **Clarify only** for minimal ambiguity fixes.
 - **Suggest, never send.** Every result is a preview. Only Tab or **Apply** writes to the draft; the plugin never sends or submits.
 - **Native layout.** The next-prompt preview keeps using the composer's existing overlay seat; continuation and optimization use the same card-internal preview area, below the editor and above the tool row. The editor DOM is never injected.
 - **Prompt history.** ↑ walks back through recent prompts, ↓ walks forward, and going past the newest entry restores the original draft. A typed prefix filters the history.
@@ -55,6 +55,7 @@ While the session is running, while files or images are attached, or when the co
 
 - **Automation**: one switch for generating the next-prompt suggestion after each completed answer (on by default).
 - **Auxiliary model**: a card with "Follow the session model" or a configured provider/model; after choosing a provider you can pick a specific model or keep the provider default. Changes apply immediately without reloading the plugin.
+- **Optimization strategy**: **Faithful expand** is the default; it improves wording and makes already-implied detail explicit. Choose **Clarify only** for minimal ambiguity fixes. Neither mode adds goals, acceptance criteria, or technical choices the draft did not express.
 - **Shortcuts**: key badges for both commands, "Unbound" when unset, and a pointer to **Settings → General → Shortcuts**.
 
 ## Behavior and guarantees

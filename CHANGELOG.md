@@ -4,6 +4,13 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.3.6-rc.2] - 2026-10-28
+
+### Changed
+
+- Continuation requests now use a completion-style prompt that quotes the unfinished draft, marks the caret, and includes examples of user-voice continuations. The prompt explicitly forbids answering the draft.
+- Optimization strategy is configurable under **Settings → Prompt assist**: `expand` is the default and improves wording and makes already-implied detail explicit; `clarify` keeps the minimal ambiguity contract. Neither adds unstated goals, acceptance criteria, or technical choices.
+
 ## [1.3.6-rc.1] - 2026-10-28
 
 ### Changed

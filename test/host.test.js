@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
-import { PromptAssist, inject } from '../src/index.js';
+import { PromptAssist, inject, Config } from '../src/index.js';
 import { initialState } from '../src/core.js';
 import { createPreviewController } from '../src/preview-state.js';
 
@@ -153,10 +153,11 @@ test('continuation uses the configured auxiliary route and sends only draft frag
     assert.equal(f.calls[0].model, 'aux-model');
     assert.equal(f.calls[0].maxTokens, 256);
     assert.deepEqual(f.calls[0].tools, []);
-    const payload = JSON.parse(f.calls[0].messages[0].content[0].text);
-    assert.equal(payload.prefix, '请检查这个修复');
-    assert.equal(payload.suffix, '');
-    assert.deepEqual(payload.transcript.map(row => row.role), ['user', 'assistant']);
+    const body = f.calls[0].messages[0].content[0].text;
+    assert.match(body, /Human: 帮我写测试/);
+    assert.match(body, /Assistant: 测试已经写好/);
+    assert.match(body, /请检查这个修复<CURSOR>/);
+    assert.match(body, /Continue after <CURSOR>/);
   } finally { await f.ctx.fiber.dispose(); }
 });
 
@@ -201,6 +202,29 @@ test('optimize uses the built-in contract and parses the MODE protocol', async (
     assert.equal(result.status, 'ready');
     assert.equal(result.mode, 'questions');
   } finally { await questions.ctx.fiber.dispose(); }
+});
+
+test('optimize honors the clarify strategy from volatile config', async () => {
+  const f = setup(streamOf('MODE: replace\n\n请补充一个最小复现。'), Config({ optimizeStrategy: 'clarify' }));
+  try {
+    const result = await f.service.optimize({ sessionId: f.agent.id, endSeq: 9,
+      text: '帮我修一下', before: '', after: '' });
+    assert.equal(result.status, 'ready');
+    assert.match(f.calls[0].system, /Minimal completion/);
+    assert.doesNotMatch(f.calls[0].system, /Enrichment principles/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('optimize honors the expand strategy', async () => {
+  const f = setup(streamOf('MODE: replace\n\n请补充一个最小复现。'), { optimizeStrategy: 'expand' });
+  try {
+    const result = await f.service.optimize({ sessionId: f.agent.id, endSeq: 9,
+      text: '帮我修一下', before: '', after: '' });
+    assert.equal(result.status, 'ready');
+    assert.match(f.calls[0].system, /Enrichment principles/);
+    assert.match(f.calls[0].system, /Rewrite, do not echo/);
+    assert.doesNotMatch(f.calls[0].system, /Minimal completion/);
+  } finally { await f.ctx.fiber.dispose(); }
 });
 
 test('the Host declares no environment skill-service dependency', () => {
