@@ -54,6 +54,12 @@ async function clearComposer(composer) {
   await page.keyboard.press('Backspace');
 }
 
+async function setComposerText(composer, text) {
+  await clearComposer(composer);
+  await page.keyboard.insertText(text);
+  await expect(composer).toHaveText(text);
+}
+
 test.beforeAll(async ({ browser }) => {
   context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -77,8 +83,7 @@ test('boots the packed plugin and opens an editable composer', async () => {
 
 test('renders the automatic next-prompt preview after a completed turn', async () => {
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
-  await composer.click();
-  await page.keyboard.type(CHAT_PROMPT);
+  await setComposerText(composer, CHAT_PROMPT);
   await page.keyboard.press('Enter');
 
   await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
@@ -142,8 +147,7 @@ async function assertInsideComposer(text) {
 
 test('shows the manual continuation preview inside the composer card', async () => {
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
-  await clearComposer(composer);
-  await page.keyboard.type(CONTINUATION_DRAFT);
+  await setComposerText(composer, CONTINUATION_DRAFT);
   await page.keyboard.down('Control');
   await page.keyboard.down('Shift');
   await page.keyboard.press(',');
@@ -157,8 +161,7 @@ test('shows the manual continuation preview inside the composer card', async () 
 
 test('applies only with Apply and dismisses on Cancel', async () => {
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
-  await clearComposer(composer);
-  await page.keyboard.type(OPTIMIZE_DRAFT);
+  await setComposerText(composer, OPTIMIZE_DRAFT);
   await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
 
   await expect(page.getByText(OPTIMIZE_TEXT).first()).toBeVisible({ timeout: 60_000 });
@@ -171,8 +174,7 @@ test('applies only with Apply and dismisses on Cancel', async () => {
   await expect(composer).toHaveText(OPTIMIZE_TEXT);
   await expect(page.locator('[data-prompt-assist-draft-panel]')).toHaveCount(0);
 
-  await clearComposer(composer);
-  await page.keyboard.type(OPTIMIZE_DRAFT);
+  await setComposerText(composer, OPTIMIZE_DRAFT);
   await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
   await expect(page.getByText(OPTIMIZE_TEXT).first()).toBeVisible({ timeout: 60_000 });
   await page.getByRole('button', { name: /^(Cancel|取消)$/ }).first().click();
@@ -182,8 +184,7 @@ test('applies only with Apply and dismisses on Cancel', async () => {
 
 test('shows clarification questions without an Apply action', async () => {
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
-  await clearComposer(composer);
-  await page.keyboard.type(QUESTIONS_DRAFT);
+  await setComposerText(composer, QUESTIONS_DRAFT);
   await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
 
   await expect(page.getByText(QUESTIONS_TEXT).first()).toBeVisible({ timeout: 60_000 });
@@ -203,13 +204,11 @@ test('shows clarification questions without an Apply action', async () => {
 
   // They must not outlive an empty draft. Type after clearing so the automatic
   // next-prompt overlay cannot hide a stale questions panel.
-  await clearComposer(composer);
-  await page.keyboard.type('x');
+  await setComposerText(composer, 'x');
   await expect(page.locator('[data-prompt-assist-draft-panel]')).toHaveCount(0);
 
   // Close is a real action, not just a rendered label.
-  await clearComposer(composer);
-  await page.keyboard.type(QUESTIONS_DRAFT);
+  await setComposerText(composer, QUESTIONS_DRAFT);
   await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
   await expect(page.getByText(QUESTIONS_TEXT).first()).toBeVisible({ timeout: 60_000 });
   await page.getByRole('button', { name: /^(Close|关闭)$/ }).first().click();
@@ -218,8 +217,7 @@ test('shows clarification questions without an Apply action', async () => {
 
 test('dismisses clarification questions after sending the draft', async () => {
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
-  await clearComposer(composer);
-  await page.keyboard.type(QUESTIONS_DRAFT);
+  await setComposerText(composer, QUESTIONS_DRAFT);
   await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
   await expect(page.getByText(QUESTIONS_TEXT).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('button', { name: /^(Apply|应用)$/ })).toHaveCount(0);
@@ -229,17 +227,14 @@ test('dismisses clarification questions after sending the draft', async () => {
   await expect(page.getByRole('button', { name: /2 turns/ })).toBeVisible({ timeout: 90_000 });
 
   // Type after completion so a fresh next-prompt overlay cannot mask a stale panel.
-  await composer.click();
-  await page.keyboard.type('x');
-  await expect(composer).toHaveText('x');
+  await setComposerText(composer, 'x');
   await expect(page.locator('[data-prompt-assist-draft-panel]')).toHaveCount(0);
   await screenshot('07-questions-after-send.png');
 });
 
 test('rejects a continuation with no text before the caret', async () => {
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
-  await clearComposer(composer);
-  await page.keyboard.type(CONTINUATION_DRAFT);
+  await setComposerText(composer, CONTINUATION_DRAFT);
   await page.keyboard.press('Home');
   await page.keyboard.down('Control');
   await page.keyboard.down('Shift');
