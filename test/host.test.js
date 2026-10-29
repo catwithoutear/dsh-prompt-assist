@@ -10,7 +10,9 @@ function setup(stream, config = {}, extras = {}) {
   const state = { ...initialState(), eligible: true, endSeq: 9,
     recent: [{ role: 'user', text: '帮我写测试' }, { role: 'assistant', text: '测试已经写好' }] };
   const agent = { id: 'session-test', status: 'idle', inbox: { nextTurn: [], nextStep: [] }, session: { id: 'session-test' } };
-  const selection = { next: { provider: 'chosen-provider', model: 'chosen-model' } };
+  const selection = 'selection' in extras
+    ? extras.selection
+    : { next: { provider: 'chosen-provider', model: 'chosen-model' } };
   const calls = [];
   const modelCalls = [];
   ctx.provide('agents', { get: id => id === agent.id ? agent : undefined });
@@ -282,6 +284,33 @@ test('predict uses the configured auxiliary route when one is set', async () => 
     assert.equal(f.calls[0].provider, 'aux-provider');
     assert.equal(f.calls[0].model, 'aux-model');
   } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('a session that had no model and picked one later optimizes instead of reporting no model', async () => {
+  const session = { id: 'session-test', requestHeader: () => ({ config: {} }) };
+  const f = setup(streamOf('MODE: replace\n\n请确认容器内的布局。'), {}, {
+    selection: undefined,
+  });
+  f.agent.session = session;
+  try {
+    const before = await f.service.optimize({ sessionId: f.agent.id, endSeq: 9,
+      text: '帮我检查布局', before: '', after: '' });
+    assert.equal(before.status, 'unavailable');
+    assert.equal(before.reason, 'no-model');
+    assert.equal(f.calls.length, 0);
+  } finally { await f.ctx.fiber.dispose(); }
+
+  const picked = setup(streamOf('MODE: replace\n\n请确认容器内的布局。'), {}, {
+    selection: { next: { provider: 'picked-provider', model: 'picked-model' } },
+  });
+  picked.agent.session = session;
+  try {
+    const result = await picked.service.optimize({ sessionId: picked.agent.id, endSeq: 9,
+      text: '帮我检查布局', before: '', after: '' });
+    assert.equal(result.status, 'ready', JSON.stringify(result));
+    assert.equal(picked.calls[0].provider, 'picked-provider');
+    assert.equal(picked.calls[0].model, 'picked-model');
+  } finally { await picked.ctx.fiber.dispose(); }
 });
 
 test('a configured but unavailable auxiliary route is reported instead of falling back', async () => {
