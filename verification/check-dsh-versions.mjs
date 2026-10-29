@@ -73,23 +73,34 @@ function compareVersions(left, right) {
 function parseRange(text) {
   const match = /^>=\s*(\S+)\s+<\s*(\S+)$/.exec(String(text ?? '').trim());
   if (match === null || parseVersion(match[1]) === null || parseVersion(match[2]) === null) {
-    throw new Error(`unsupported engines.dsh range: ${JSON.stringify(text)}; expected ">=X <Y"`);
+    throw new Error(`unsupported engines.dsh range: ${JSON.stringify(text)}; expected ">=X <Y" or ">=X <Y || >=Z <W"`);
   }
   return { min: match[1], max: match[2] };
 }
 
-function satisfies(version, range) {
-  if (compareVersions(version, range.min) < 0) return false;
-  if (compareVersions(version, range.max) >= 0) return false;
+/** Parse an engines range as one or more `>=min <max` alternatives. */
+function parseRanges(text) {
+  const parts = String(text ?? '').split('||').map(part => part.trim()).filter(Boolean);
+  if (parts.length === 0) throw new Error('engines.dsh must not be empty');
+  return parts.map(parseRange);
+}
+
+function satisfies(version, ranges) {
   const parsed = parseVersion(version);
-  if (parsed.prerelease.length === 0) return true;
-  // npm semver: a prerelease only matches when a comparator with the same
-  // major.minor.patch carries a prerelease. Our lower bound is that comparator.
-  const min = parseVersion(range.min);
-  return min.prerelease.length > 0
-    && parsed.major === min.major
-    && parsed.minor === min.minor
-    && parsed.patch === min.patch;
+  if (parsed === null) return false;
+  return ranges.some(range => {
+    if (compareVersions(version, range.min) < 0) return false;
+    if (compareVersions(version, range.max) >= 0) return false;
+    if (parsed.prerelease.length === 0) return true;
+    // npm semver: a prerelease only matches when a comparator with the same
+    // major.minor.patch carries a prerelease. Each alternative uses its own
+    // lower-bound comparator; this is what admits an explicit alpha canary.
+    const min = parseVersion(range.min);
+    return min.prerelease.length > 0
+      && parsed.major === min.major
+      && parsed.minor === min.minor
+      && parsed.patch === min.patch;
+  });
 }
 
 function isCanary(version) {
@@ -143,7 +154,7 @@ let result = {
 try {
   const pkg = JSON.parse(await readFile(packagePath, 'utf8'));
   const versionsDoc = JSON.parse(await readFile(versionsPath, 'utf8'));
-  const range = parseRange(pkg.engines?.dsh);
+  const ranges = parseRanges(pkg.engines?.dsh);
   result.engines = pkg.engines.dsh;
 
   const listed = versionsDoc.versions;
@@ -157,10 +168,10 @@ try {
     }
   }
   for (const version of listed) {
-    if (!satisfies(version, range)) throw new Error(`verified version ${version} is outside engines.dsh ${range.min}..${range.max}`);
+    if (!satisfies(version, ranges)) throw new Error(`verified version ${version} is outside engines.dsh ${pkg.engines.dsh}`);
   }
-  if (compareVersions(listed[0], range.min) !== 0) {
-    throw new Error(`engines.dsh lower bound ${range.min} must equal the lowest verified version ${listed[0]}`);
+  if (compareVersions(listed[0], ranges[0].min) !== 0) {
+    throw new Error(`engines.dsh lower bound ${ranges[0].min} must equal the lowest verified version ${listed[0]}`);
   }
   result.listed = listed;
 
@@ -191,11 +202,11 @@ try {
         result.error = `verified versions not published: ${result.missingListed.join(', ')}`;
       }
       result.latestOverall = published.at(-1) ?? null;
-      const inRange = published.filter(version => satisfies(version, range));
+      const inRange = published.filter(version => satisfies(version, ranges));
       result.latestPublished = inRange.at(-1) ?? null;
       const newer = published.filter(version => compareVersions(version, highestListed) > 0);
-      result.newVersions = newer.filter(version => satisfies(version, range));
-      result.newerOutsideRange = newer.filter(version => !satisfies(version, range));
+      result.newVersions = newer.filter(version => satisfies(version, ranges));
+      result.newerOutsideRange = newer.filter(version => !satisfies(version, ranges));
       if (status === 0) {
         if (result.newVersions.length > 0) status = 1;
         else if (result.newerOutsideRange.some(version => !isCanary(version))) status = 1;

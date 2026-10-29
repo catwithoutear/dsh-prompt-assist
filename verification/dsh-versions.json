@@ -1,8 +1,13 @@
 {
   "schemaVersion": 1,
-  "description": "Exact @deepseek-ai/dsh versions exercised by verification/. Add a version only after the matching Docker matrix run is green. The lowest entry must equal the lower bound of package.json engines.dsh.",
+  "description": "Exact @deepseek-ai/dsh versions exercised by verification/. Add a version only after the matching Docker matrix run is green. The lowest entry must equal the lower bound of package.json engines.dsh. nodeImages pins the Node image per DSH version; defaultNodeImage applies otherwise.",
+  "defaultNodeImage": "node:22-bookworm-slim",
+  "nodeImages": {
+    "0.2.2-alpha.2": "node:24-bookworm-slim"
+  },
   "versions": [
     "0.2.1-rc.3",
-    "0.2.1-rc.4"
+    "0.2.1-rc.4",
+    "0.2.2-alpha.2"
   ]
 }

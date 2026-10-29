@@ -20,6 +20,8 @@ function value(flag, fallback) {
 const versionsDoc = JSON.parse(readFileSync(join(here, 'dsh-versions.json'), 'utf8'));
 const requested = value('--dsh-version', '');
 const versions = requested ? [requested] : versionsDoc.versions;
+const nodeImages = versionsDoc.nodeImages ?? {};
+const defaultNodeImage = versionsDoc.defaultNodeImage ?? 'node:22-bookworm-slim';
 const registry = value('--registry', process.env.NPM_REGISTRY || 'https://registry.npmjs.org');
 const downloadHost = value('--playwright-download-host', process.env.PLAYWRIGHT_DOWNLOAD_HOST || '');
 const noBuild = process.argv.includes('--no-build');
@@ -39,6 +41,8 @@ const results = [];
 
 for (const version of versions) {
   const tag = `dsh-prompt-assist-verify:${version.replace(/[^0-9A-Za-z.-]/g, '-')}`;
+  const nodeImage = value('--node-image', nodeImages[version]
+    ?? (version.startsWith('0.2.2-alpha.') ? 'node:24-bookworm-slim' : defaultNodeImage));
   const artifacts = resolve(here, 'artifacts', version);
   mkdirSync(artifacts, { recursive: true });
 
@@ -47,6 +51,7 @@ for (const version of versions) {
       'build',
       '--file', join(here, 'Dockerfile'),
       '--build-arg', `DSH_VERSION=${version}`,
+      '--build-arg', `NODE_IMAGE=${nodeImage}`,
       '--build-arg', `NPM_REGISTRY=${registry}`,
       '--tag', tag,
     ];

@@ -57,7 +57,14 @@ jobs:
               console.error("No DSH versions to verify; add one to verification/dsh-versions.json.");
               process.exit(1);
             }
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ dsh: versions })}\n`);
+            const nodeImages = doc.nodeImages || {};
+            const defaultNodeImage = doc.defaultNodeImage || "node:22-bookworm-slim";
+            const include = versions.map(version => ({
+              dsh: version,
+              nodeImage: nodeImages[version]
+                || (version.startsWith("0.2.2-alpha.") ? "node:24-bookworm-slim" : defaultNodeImage),
+            }));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include })}\n`);
           '
 
   verify:
@@ -83,6 +90,7 @@ jobs:
           tags: dsh-prompt-assist-verify:${{ matrix.dsh }}
           build-args: |
             DSH_VERSION=${{ matrix.dsh }}
+            NODE_IMAGE=${{ matrix.nodeImage }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
