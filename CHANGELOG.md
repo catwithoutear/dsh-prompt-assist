@@ -4,6 +4,10 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- A session that started without a model and had one selected later no longer fails optimization with "auxiliary model unavailable". Route resolution now trusts only the live `modelSelection` and never substitutes the session request header, which reflects the model the session started with rather than the current one. "No model selected" and "model unavailable" also have separate messages.
+
 ## [1.3.6-rc.3] - 2026-10-29
 
 ### Changed

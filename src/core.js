@@ -168,8 +168,13 @@ export function parseOptimize(raw) {
 export function readVolatile(value) {
   return value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value;
 }
-export function selectedModel(selection, session) {
-  return selection?.next ?? selection?.lastUsed ?? session.requestHeader()?.config;
+/**
+ * The session's current model selection. Only the live projection counts: the
+ * session request header records the model the session started with, so it must
+ * never stand in for a later selection the human made.
+ */
+export function selectedModel(selection) {
+  return selection?.next ?? selection?.lastUsed ?? undefined;
 }
 /** Resolve the effective route: configured auxiliary route, otherwise the session's model. */
 export function routeOf(config, selection, session) {
@@ -178,9 +183,9 @@ export function routeOf(config, selection, session) {
   if (typeof provider === 'string' && provider && typeof model === 'string' && model) {
     return { provider, model, source: 'aux' };
   }
-  const fallback = selectedModel(selection, session);
-  return { provider: fallback?.provider, model: fallback?.model,
-    reasoningEffort: fallback?.reasoningEffort, source: 'session' };
+  const chosen = selectedModel(selection, session);
+  return { provider: chosen?.provider, model: chosen?.model,
+    reasoningEffort: chosen?.reasoningEffort, source: 'session' };
 }
 export function lowestEffort(info, selected) {
   const ids = (info?.reasoning?.efforts ?? []).map(e => e.id);

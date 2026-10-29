@@ -64,10 +64,12 @@ test('assistant wording and malformed output are rejected, useful user prompts s
   assert.equal(sanitize('“请帮我添加一个使用示例。”'), '请帮我添加一个使用示例。');
   assert.equal(sanitize('Please add a regression test.'), 'Please add a regression test.');
 });
-test('model choice stays session-local', () => {
+test('model choice stays session-local and never falls back to the request header', () => {
   const session = { requestHeader: () => ({ config: { provider: 'old', model: 'old' } }) };
   assert.deepEqual(selectedModel({ next: { provider: 'current', model: 'chosen' }, lastUsed: null }, session), { provider: 'current', model: 'chosen' });
-  assert.deepEqual(selectedModel(undefined, session), { provider: 'old', model: 'old' });
+  assert.deepEqual(selectedModel({ next: null, lastUsed: { provider: 'last', model: 'last-model' } }), { provider: 'last', model: 'last-model' });
+  assert.equal(selectedModel(undefined, session), undefined);
+  assert.equal(selectedModel({ next: null, lastUsed: null }, session), undefined);
 });
 test('wire input rejects model overrides and invalid event cursors', () => {
   assert.throws(() => requestCodec.create().parse({ sessionId: 'a', endSeq: 2, model: 'other' }));
@@ -79,6 +81,12 @@ test('routeOf prefers the configured auxiliary route and falls back to the sessi
     { provider: 'aux-provider', model: 'aux-model', source: 'aux' });
   assert.deepEqual(routeOf({ provider: '', model: '' }, { next: { provider: 'session', model: 'session-model' } }, session),
     { provider: 'session', model: 'session-model', reasoningEffort: undefined, source: 'session' });
+  // A session that started without a model and picked one later resolves from
+  // the live selection; the stale request-header config must not win.
+  assert.deepEqual(routeOf({ provider: '', model: '' }, { next: { provider: 'picked', model: 'picked-model' } },
+    { requestHeader: () => ({ config: {} }) }),
+    { provider: 'picked', model: 'picked-model', reasoningEffort: undefined, source: 'session' });
+  assert.equal(routeOf({ provider: '', model: '' }, undefined, session).provider, undefined);
   const live = { provider: { get: () => 'live-provider' }, model: { get: () => 'live-model' } };
   assert.equal(routeOf(live, undefined, session).provider, 'live-provider');
 });
