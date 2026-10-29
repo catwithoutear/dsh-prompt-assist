@@ -18,7 +18,7 @@ A DSH plugin that suggests the next user prompt after a completed answer, lets y
 
 ## Compatibility
 
-- DSH `>=0.2.1-rc.3 <0.3.0`, Node.js >= 22.
+- DSH `>=0.2.1-rc.3 <0.2.2-alpha.0 || >=0.2.2-alpha.2 <0.2.3-0` (verified: `0.2.1-rc.3`, `0.2.1-rc.4`, `0.2.2-alpha.2`), Node.js >= 22. The alpha verification uses Node 24 inside Docker.
 - Verified exact DSH versions are listed in [`verification/dsh-versions.json`](https://github.com/catwithoutear/dsh-prompt-assist/blob/main/verification/dsh-versions.json) and exercised by [`verification/`](https://github.com/catwithoutear/dsh-prompt-assist/blob/main/verification/README.md). The accepted range and that list must stay in sync; a newer release inside the range is not supported until its matrix run is green.
 - Disable `dsh-prompt-history` before enabling this plugin. Running both creates duplicate keyboard listeners and overlapping previews.
 - By default the plugin uses the session model and consumes its quota; a configured auxiliary model consumes that model's quota. The plugin adds no credentials of its own.

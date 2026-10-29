@@ -10,16 +10,16 @@
     "url": "git+https://github.com/catwithoutear/dsh-prompt-assist.git"
   },
   "homepage": "https://github.com/catwithoutear/dsh-prompt-assist#readme",
-  "engines": { "node": ">=22", "dsh": ">=0.2.1-rc.3 <0.3.0" },
+  "engines": { "node": ">=22", "dsh": ">=0.2.1-rc.3 <0.2.2-alpha.0 || >=0.2.2-alpha.2 <0.2.3-0" },
   "exports": {
     ".": "./src/index.js", "./client": "./lib/client.js",
     "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg"
   },
   "files": ["src", "lib/client.js", "build.mjs", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md", "README_ZH.md", "CHANGELOG.md", "LICENSE"],
   "scripts": { "build": "node build.mjs", "test": "node --import ./test/runtime-loader.mjs --test test/*.test.js", "check": "node --check src/index.js && node --check lib/client.js", "prepack": "npm run build && npm run check && npm test", "verify:docker": "node verification/run.mjs", "verify:versions": "node verification/check-dsh-versions.mjs --offline" },
-  "dependencies": { "zod": "4.4.3", "@deepseek-ai/dsh-typert-protocol": "^0.2.1-rc.3" },
+  "dependencies": { "zod": "4.4.3", "@deepseek-ai/dsh-typert-protocol": "^0.2.1-rc.3 || ^0.2.2-alpha.2" },
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "^3.18.0"
+    "@deepseek-ai/schemastery": "^3.18.0 || ^3.18.6-alpha.1"
   },
   "devDependencies": { "@deepseek-ai/schemastery": "^3.18.0" },
   "dsh": {

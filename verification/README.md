@@ -16,8 +16,11 @@ npm run verify:docker
 ```
 
 The default command builds and runs one image per entry in
-`verification/dsh-versions.json`. To verify a single version or a version that
-is not in the matrix yet:
+`verification/dsh-versions.json`. Each entry can pin a Node image through
+`nodeImages`; `defaultNodeImage` applies otherwise. The `0.2.2-alpha.2` entry
+uses Node 24 because that DSH release requires Node >= 24.9; the rc entries use
+the default Node 22 image. To verify a single
+version or a version that is not in the matrix yet:
 
 ```sh
 node verification/run.mjs --dsh-version 0.2.1-rc.3
@@ -90,12 +93,13 @@ Version support has two layers:
 
 A DSH release inside `engines.dsh` is not considered supported merely because
 the semver range accepts it. It becomes supported when its entry is added here
-after a green run. Current verified versions: `0.2.1-rc.3` and `0.2.1-rc.4`.
+after a green run. Current verified versions: `0.2.1-rc.3`, `0.2.1-rc.4`, and `0.2.2-alpha.2`. The alpha entry uses `node:24-bookworm-slim`; the rc entries use the `defaultNodeImage` (`node:22-bookworm-slim`). `nodeImages` must only name versions present in `versions`.
 
-The checker also reports published versions newer than the highest verified
-version even when they are outside `engines.dsh` (for example a future
-`0.3.0`). In-range releases and stable/rc releases outside the range fail the
-watch job; alpha/beta canaries are reported but do not fail it.
+The checker evaluates `engines.dsh` with the same include-prerelease semantics
+DSH uses, requires every prerelease lower bound to appear in the matrix, and
+reports published versions newer than the highest verified version even when
+they are outside `engines.dsh`. In-range releases and stable/rc releases outside
+the range fail the watch job; alpha/beta canaries are reported but do not fail it.
 
 ### When DSH publishes a new version
 

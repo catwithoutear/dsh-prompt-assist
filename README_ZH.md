@@ -18,7 +18,7 @@
 
 ## 兼容性
 
-- DSH `>=0.2.1-rc.3 <0.3.0`，Node.js >= 22。
+- DSH `>=0.2.1-rc.3 <0.2.2-alpha.0 || >=0.2.2-alpha.2 <0.2.3-0`（已验证：`0.2.1-rc.3`、`0.2.1-rc.4`、`0.2.2-alpha.2`），Node.js >= 22。alpha 版本的 Docker 验证使用 Node 24。
 - 已验证的精确 DSH 版本列在 [`verification/dsh-versions.json`](https://github.com/catwithoutear/dsh-prompt-assist/blob/main/verification/dsh-versions.json)，由 [`verification/`](https://github.com/catwithoutear/dsh-prompt-assist/blob/main/verification/README.md) 实际执行。`engines.dsh` 范围与该列表必须保持同步；范围内更新的 DSH 版本只有在矩阵通过后才算支持。
 - 启用本插件前先停用 `dsh-prompt-history`。两者同时运行会产生重复的键盘监听和重叠的预览。
 - 默认使用会话已选模型并消耗该模型额度；配置辅助模型后消耗所选模型额度。插件本身不新增凭据。
