@@ -17,6 +17,7 @@ on:
       - 'package-lock.json'
       - '.dockerignore'
       - 'verification/**'
+      - 'test/**'
       - '.github/workflows/verify.yml'
 
 permissions:
@@ -34,6 +35,9 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
+
+      - name: Verify version matrix consistency
+        run: node verification/check-dsh-versions.mjs --offline
 
       - name: Build version matrix
         id: matrix

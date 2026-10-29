@@ -86,21 +86,11 @@ function parseRanges(text) {
 }
 
 function satisfies(version, ranges) {
-  const parsed = parseVersion(version);
-  if (parsed === null) return false;
-  return ranges.some(range => {
-    if (compareVersions(version, range.min) < 0) return false;
-    if (compareVersions(version, range.max) >= 0) return false;
-    if (parsed.prerelease.length === 0) return true;
-    // npm semver: a prerelease only matches when a comparator with the same
-    // major.minor.patch carries a prerelease. Each alternative uses its own
-    // lower-bound comparator; this is what admits an explicit alpha canary.
-    const min = parseVersion(range.min);
-    return min.prerelease.length > 0
-      && parsed.major === min.major
-      && parsed.minor === min.minor
-      && parsed.patch === min.patch;
-  });
+  if (parseVersion(version) === null) return false;
+  // DSH's plugin manager evaluates engines.dsh with { includePrerelease: true }.
+  // Model that behavior here instead of npm's default prerelease exclusion.
+  return ranges.some(range =>
+    compareVersions(version, range.min) >= 0 && compareVersions(version, range.max) < 0);
 }
 
 function isCanary(version) {
@@ -170,8 +160,23 @@ try {
   for (const version of listed) {
     if (!satisfies(version, ranges)) throw new Error(`verified version ${version} is outside engines.dsh ${pkg.engines.dsh}`);
   }
-  if (compareVersions(listed[0], ranges[0].min) !== 0) {
-    throw new Error(`engines.dsh lower bound ${ranges[0].min} must equal the lowest verified version ${listed[0]}`);
+  const minimum = ranges.reduce((min, range) => compareVersions(range.min, min) < 0 ? range.min : min,
+    ranges[0].min);
+  if (compareVersions(listed[0], minimum) !== 0) {
+    throw new Error(`engines.dsh lower bound ${minimum} must equal the lowest verified version ${listed[0]}`);
+  }
+  for (const range of ranges) {
+    if (parseVersion(range.min).prerelease.length > 0 && !listed.includes(range.min)) {
+      throw new Error(`engines.dsh prerelease bound ${range.min} must appear in verification/dsh-versions.json`);
+    }
+  }
+  const nodeImages = versionsDoc.nodeImages;
+  if (nodeImages !== undefined && (nodeImages === null || typeof nodeImages !== 'object' || Array.isArray(nodeImages))) {
+    throw new Error('verification/dsh-versions.json "nodeImages" must be an object');
+  }
+  for (const [version, image] of Object.entries(nodeImages ?? {})) {
+    if (!listed.includes(version)) throw new Error(`nodeImages version ${version} is not listed in versions`);
+    if (typeof image !== 'string' || image.trim() === '') throw new Error(`nodeImages[${version}] must be a non-empty string`);
   }
   result.listed = listed;
 

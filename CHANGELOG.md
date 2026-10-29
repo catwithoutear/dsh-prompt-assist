@@ -6,7 +6,7 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ### Changed
 
-- Added explicit DSH `0.2.2-alpha.2` support: `engines.dsh` now includes an alpha comparator, the verification matrix runs the version, and `check-dsh-versions` understands multi-range engines and prerelease comparators. The harness selects Node 24 for the alpha cell and Node 22 for the rc cells; the protocol and schemastery ranges accept the alpha packages.
+- Added explicit DSH `0.2.2-alpha.2` support: `engines.dsh` now includes an explicit alpha comparator with a `<0.2.3-0` ceiling, the verification matrix runs the version, and `check-dsh-versions` understands multi-range engines and prerelease comparators. The harness selects Node 24 for the alpha cell and Node 22 for the rc cells; the protocol and schemastery ranges accept the alpha packages.
 
 ## [1.3.6-rc.2] - 2026-10-28
 
