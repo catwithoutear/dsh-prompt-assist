@@ -73,6 +73,126 @@ test.beforeAll(async ({ browser }) => {
   page = await context.newPage();
 });
 
+/**
+ * Parse a CSS colour into sRGB channels. Accepts #rgb/#rrggbb/#rrggbbaa and
+ * rgb()/rgba(); returns null for anything the resolver must skip.
+ */
+function parseColor(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim().toLowerCase();
+  const hex = /^#([0-9a-f]{3,8})$/.exec(text);
+  if (hex) {
+    const digits = hex[1];
+    const expand = digits.length <= 4 ? [...digits].map(char => char + char).join('') : digits;
+    if (expand.length !== 6 && expand.length !== 8) return null;
+    return {
+      r: parseInt(expand.slice(0, 2), 16),
+      g: parseInt(expand.slice(2, 4), 16),
+      b: parseInt(expand.slice(4, 6), 16),
+      a: expand.length === 8 ? parseInt(expand.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+  const rgb = /^rgba?\(([^)]+)\)$/.exec(text);
+  if (rgb) {
+    const parts = rgb[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    if (parts.length < 3 || parts.some(Number.isNaN)) return null;
+    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+  }
+  return null;
+}
+
+function luminance(color) {
+  const channel = value => {
+    const scaled = value / 255;
+    return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+}
+
+/** Flatten a translucent colour over an opaque background. */
+function over(color, background) {
+  const alpha = color.a ?? 1;
+  return {
+    r: color.r * alpha + background.r * (1 - alpha),
+    g: color.g * alpha + background.g * (1 - alpha),
+    b: color.b * alpha + background.b * (1 - alpha),
+    a: 1,
+  };
+}
+
+function contrast(left, right) {
+  const a = luminance(left);
+  const b = luminance(right);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/** Read the painted colours of one settings select in the current theme. */
+async function selectSample(selector) {
+  return page.evaluate(target => {
+    const element = document.querySelector(target);
+    if (!element) return null;
+    const card = element.closest('.dsh-pa-card');
+    const style = getComputedStyle(element);
+    const cardStyle = card ? getComputedStyle(card) : null;
+    const shadow = style.boxShadow && style.boxShadow !== 'none' ? style.boxShadow : '';
+    return {
+      selectBackground: style.backgroundColor,
+      selectColor: style.color,
+      // The inset stroke is what separates the field from the card fill.
+      selectStroke: /(rgba?\([^)]+\)|#[0-9a-f]{3,8})/i.exec(shadow)?.[0] ?? 'rgba(0, 0, 0, 0)',
+      cardBackground: cardStyle ? cardStyle.backgroundColor : 'rgba(0, 0, 0, 0)',
+      cardBorder: cardStyle ? cardStyle.borderTopColor : 'rgba(0, 0, 0, 0)',
+      bodyBackground: getComputedStyle(document.body).backgroundColor,
+      height: element.getBoundingClientRect().height,
+    };
+  }, selector);
+}
+
+function analysed(sample, theme) {
+  const pageBackground = parseColor(sample.bodyBackground) ?? { r: 255, g: 255, b: 255, a: 1 };
+  const card = over(parseColor(sample.cardBackground) ?? { r: 0, g: 0, b: 0, a: 0 }, pageBackground);
+  const select = over(parseColor(sample.selectBackground) ?? { r: 0, g: 0, b: 0, a: 0 }, card);
+  const text = over(parseColor(sample.selectColor) ?? { r: 0, g: 0, b: 0, a: 1 }, select);
+  const stroke = over(parseColor(sample.selectStroke) ?? { r: 0, g: 0, b: 0, a: 0 }, card);
+  return { theme, card, select, text, stroke, height: sample.height,
+    fillRatio: contrast(select, card), strokeRatio: contrast(stroke, card),
+    textRatio: contrast(text, select) };
+}
+
+/**
+ * Open Settings → Prompt assist. The settings page is reached from the account
+ * menu, so probe the known triggers instead of assuming one entry point.
+ */
+async function openSettings() {
+  await page.goto(DSH_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await page.waitForTimeout(1500);
+  await dismissOnboarding();
+  const section = page.getByRole('button', { name: /^(Prompt assist|提示词助手)$/ }).first();
+  const triggers = [
+    page.getByRole('button', { name: /^(Account menu|账户菜单)/i }).first(),
+    page.getByRole('button', { name: /^(More|更多)$/ }).last(),
+    page.getByRole('button', { name: /^(Settings|设置)$/ }).first(),
+  ];
+  for (const trigger of triggers) {
+    if (!(await trigger.count()) || !(await trigger.isVisible().catch(() => false))) continue;
+    await trigger.click();
+    await page.waitForTimeout(600);
+    if (await section.isVisible().catch(() => false)) break;
+    const item = page.getByRole('menuitem', { name: /^(Settings|设置)$/ })
+      .or(page.getByRole('button', { name: /^(Settings|设置)$/ })).first();
+    if ((await item.count()) && (await item.isVisible().catch(() => false))) {
+      await item.click();
+      await page.waitForTimeout(800);
+      if (await section.isVisible().catch(() => false)) break;
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+  }
+  await expect(section).toBeVisible({ timeout: 30_000 });
+  await section.click();
+  await expect(page.locator('.dsh-pa-settings')).toBeVisible({ timeout: 30_000 });
+}
+
 test.afterAll(async () => {
   await context?.close();
 });
@@ -248,4 +368,26 @@ test('rejects a continuation with no text before the caret', async () => {
   await expect(page.getByText(/Place the caret after some draft text to continue\./)).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(CONTINUATION_TEXT)).toHaveCount(0);
   await screenshot('08-no-prefix.png');
+});
+
+test('settings selects stay visible in light and dark themes', async () => {
+  await openSettings();
+  const light = analysed(await selectSample('.dsh-pa-card .dsh-pa-select'), 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForTimeout(600);
+  const dark = analysed(await selectSample('.dsh-pa-card .dsh-pa-select'), 'dark');
+  await screenshot('09-settings-dark.png');
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // The field must not dissolve into the card, and its text must stay readable.
+  // Either a distinguishable fill or a visible stroke is acceptable; the bug was
+  // that the field had neither and only its label was painted.
+  for (const sample of [light, dark]) {
+    expect(sample.height, `${sample.theme} select height`).toBeGreaterThan(28);
+    const visible = Math.max(sample.fillRatio, sample.strokeRatio);
+    expect(visible, `${sample.theme} select outline contrast (fill ${sample.fillRatio.toFixed(2)}, stroke ${sample.strokeRatio.toFixed(2)})`)
+      .toBeGreaterThanOrEqual(1.15);
+    expect(sample.textRatio, `${sample.theme} select text contrast`).toBeGreaterThanOrEqual(4.5);
+  }
+  expect(luminance(dark.select)).toBeLessThan(luminance(light.select));
 });

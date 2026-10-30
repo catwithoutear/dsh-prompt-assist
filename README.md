@@ -56,6 +56,7 @@ While the session is running, while files or images are attached, or when the co
 - **Automation**: one switch for generating the next-prompt suggestion after each completed answer (on by default).
 - **Auxiliary model**: a card with "Follow the session model" or a configured provider/model; after choosing a provider you can pick a specific model or keep the provider default. Changes apply immediately without reloading the plugin.
 - **Optimization strategy**: **Faithful expand** is the default; it improves wording and makes already-implied detail explicit. Choose **Clarify only** for minimal ambiguity fixes. Neither mode adds goals, acceptance criteria, or technical choices the draft did not express.
+- **Themes**: the settings page follows the DSH light/dark theme; the select fields keep their own stroke so they stay distinguishable from the card in either theme.
 - **Shortcuts**: key badges for both commands, "Unbound" when unset, and a pointer to **Settings → General → Shortcuts**.
 
 ## Behavior and guarantees
