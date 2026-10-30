@@ -30,7 +30,7 @@ Artifacts land in `verification/artifacts/<dsh-version>/` (gitignored):
 
 | Path | Contents |
 |---|---|
-| `screens/*.png` | composer, next-prompt overlay, continuation preview, optimization replace/questions preview |
+| `screens/*.png` | composer, next-prompt overlay, continuation preview, optimization replace/questions preview, settings in the dark theme |
 | `playwright-report.json` | Playwright JSON report |
 | `test-results/` | failure screenshots and traces (trace retained on failure) |
 | `playwright.log` | runner output |
@@ -68,6 +68,10 @@ node verification/run.mjs \
   stays visible while editing, and closes on Close/empty draft/send.
 - A continuation trigger with the caret at the start of the draft shows the
   no-prefix notice instead of calling the model.
+- The Prompt assist settings page renders its selects with a visible outline in
+  both themes: the suite measures the painted colours and fails when a field
+  dissolves into its card (the dark-theme regression), and keeps the dark
+  screenshot as evidence.
 
 ## What it does not prove
 
