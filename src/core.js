@@ -84,6 +84,36 @@ export function continueUserMessage({ transcript = [], prefix = '', suffix = '' 
   ].join('\n');
 }
 
+/**
+ * True when [start, end) touches an inline non-text node: a reference chip
+ * (`occurrences`) or a quoted passage (`quotes`). DSH strips inline placeholders
+ * from externally supplied text, so a replacement range that intersects one can
+ * never be written back and the write must be refused up front.
+ */
+export function rangeHasInlineNode(items, start, end) {
+  const from = Math.max(0, Math.min(start, end));
+  const to = Math.max(start, end);
+  return (items ?? []).some(item => typeof item?.offset === 'number' && typeof item?.length === 'number'
+    && item.offset <= to && item.offset + item.length >= from);
+}
+
+/**
+ * Offsets of the inline non-text nodes rendered inside an editor root, in draft
+ * coordinates. `entries` is a pre-order walk of the root's child nodes:
+ * `{ text }` for a text node, `{ node, text }` for an inline node the host marks
+ * as non-editable. The walk mirrors how the host projects the draft, so the
+ * offsets line up with what `insertText` will later address.
+ */
+export function inlineNodeRanges(entries) {
+  const ranges = [];
+  let offset = 0;
+  for (const entry of entries ?? []) {
+    const text = typeof entry?.text === 'string' ? entry.text : '';
+    if (entry?.node !== undefined && entry?.node !== null) ranges.push({ offset, length: text.length });
+    offset += text.length;
+  }
+  return ranges;
+}
 export function textOf(message) {
   return (message?.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 }

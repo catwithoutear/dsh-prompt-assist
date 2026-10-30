@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, OPTIMIZE_SYSTEM,
   OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY, optimizeStrategy, optimizeSystem,
   continueUserMessage,
-  browseHistory, selectedModel, routeOf, SYSTEM, CONTINUE_SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX } from '../src/core.js';
+  browseHistory, selectedModel, routeOf, SYSTEM, CONTINUE_SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX,
+  rangeHasInlineNode, inlineNodeRanges } from '../src/core.js';
 import { requestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
 const user = text => ({ role: 'user', source: { kind: 'user-rpc' }, content: [{ type: 'text', text }] });
@@ -146,4 +147,40 @@ test('the continuation request quotes the draft and marks the caret', () => {
   assert.match(text, /Assistant: 已修复/);
   assert.match(text, /先按 P0 收敛<CURSOR>，然后开 change/);
   assert.match(text, /Continue after <CURSOR>/);
+});
+test('a replacement range that touches a chip or quote is detected inclusively', () => {
+  const chips = [{ offset: 4, length: 3 }];
+  // Whole draft always covers the chip.
+  assert.equal(rangeHasInlineNode(chips, 0, 40), true);
+  // Overlap, boundary touch and containment all count.
+  assert.equal(rangeHasInlineNode(chips, 4, 7), true);
+  assert.equal(rangeHasInlineNode(chips, 7, 9), true, 'range starting exactly at the chip end still touches it');
+  assert.equal(rangeHasInlineNode(chips, 2, 4), true, 'range ending exactly at the chip start still touches it');
+  assert.equal(rangeHasInlineNode(chips, 5, 6), true);
+  // A range entirely before or after the chip stays usable.
+  assert.equal(rangeHasInlineNode(chips, 0, 3), false);
+  assert.equal(rangeHasInlineNode(chips, 8, 12), false);
+  // Collapsed carets outside the chip are fine; quoted passages are covered too.
+  assert.equal(rangeHasInlineNode(chips, 9, 9), false);
+  assert.equal(rangeHasInlineNode([{ offset: 9, length: 2 }], 8, 11), true);
+  // Missing or malformed projections never claim a chip.
+  assert.equal(rangeHasInlineNode(undefined, 0, 10), false);
+  assert.equal(rangeHasInlineNode([{}], 0, 10), false);
+});
+test('inline node offsets come from the editor walk in draft order', () => {
+  // "请检查 " + quote node + " 这段怎么理解"
+  const entries = [
+    { text: '请检查 ' },
+    { node: {}, text: '这是测试回复' },
+    { text: ' 这段怎么理解' },
+  ];
+  assert.deepEqual(inlineNodeRanges(entries), [{ offset: 4, length: 6 }]);
+  assert.deepEqual(inlineNodeRanges([{ text: '纯文本' }]), []);
+  assert.deepEqual(inlineNodeRanges([]), []);
+  assert.deepEqual(inlineNodeRanges(undefined), []);
+  // Two inline nodes keep their own offsets as the text grows between them.
+  const two = inlineNodeRanges([
+    { text: 'a' }, { node: {}, text: 'bb' }, { text: 'ccc' }, { node: {}, text: 'd' },
+  ]);
+  assert.deepEqual(two, [{ offset: 1, length: 2 }, { offset: 6, length: 1 }]);
 });

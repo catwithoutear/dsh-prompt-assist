@@ -37,6 +37,11 @@ function makeClient(React) {
     return owner?.getAttribute('data-prompt-assist-owner') || undefined;
   };
 
+  /**
+   * One session's transient notice. Informational notices fade after a moment;
+   * a `sticky` notice explains a refused action and stays until the human edits,
+   * dismisses it, or triggers something else, so the reason is never missed.
+   */
   function createNoticeStore() {
     let value = '';
     let timer;
@@ -49,14 +54,63 @@ function makeClient(React) {
     return {
       getSnapshot: () => value,
       subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-      set(key) {
+      set(key, options = {}) {
         publish(key);
         clearTimeout(timer);
+        if (options.sticky === true) return;
         timer = setTimeout(() => publish(''), 2600);
       },
       clear() { clearTimeout(timer); publish(''); },
       dispose() { clearTimeout(timer); listeners.clear(); },
     };
+  }
+
+  /**
+   * True when the range touches an inline non-text node. Three sources cover the
+   * host's whole vocabulary: `occurrences` (reference chips), `quotes` (when the
+   * host publishes it) and the DOM walk, which is the only signal for quoted
+   * passages in hosts that publish no quote projection.
+   */
+  function rangeHasChip(range, state) {
+    if (!state) return false;
+    if (rangeHasInlineNode(state.occurrences, range.start, range.end)) return true;
+    if (rangeHasInlineNode(state.quotes, range.start, range.end)) return true;
+    const inline = typeof state.inlineRanges === 'function' ? state.inlineRanges() : [];
+    return rangeHasInlineNode(inline, range.start, range.end);
+  }
+
+  /**
+   * Inline-node offsets read from the live editor DOM. The host renders every
+   * non-editable inline node — a quoted passage in particular — as a
+   * `contenteditable="false"` element whose text is part of the draft, and
+   * publishes no projection for it. Walking the editor in document order gives
+   * the same offsets the draft text uses.
+   */
+  function inlineRangesFromDom(card) {
+    const editor = card?.querySelector('[data-composer-input]');
+    if (!editor) return [];
+    const entries = [];
+    const visit = node => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === 3) { entries.push({ text: child.textContent ?? '' }); continue; }
+        if (child.nodeType !== 1) continue;
+        if (child.getAttribute('contenteditable') === 'false') {
+          entries.push({ node: child, text: child.textContent ?? '' });
+          continue;
+        }
+        visit(child);
+      }
+    };
+    visit(editor);
+    return inlineNodeRanges(entries);
+  }
+
+  /** True while the composer cannot accept an optimization request. */
+  function composerRefusal(state) {
+    if (!state) return null;
+    if (state.phase !== 'plain' || state.composing || !state.draftValid) return 'error.unavailable';
+    if (!state.draft) return 'error.empty-draft';
+    return null;
   }
 
   function createSessionAssist(sessionId) {
@@ -107,11 +161,8 @@ function makeClient(React) {
       optimize() {
         const state = live;
         if (!state) return;
-        if (state.phase !== 'plain' || state.composing || !state.draftValid) {
-          notices.set('error.unavailable');
-          return;
-        }
-        if (!state.draft) { notices.set('error.empty-draft'); return; }
+        const refusal = composerRefusal(state);
+        if (refusal) { notices.set(refusal); return; }
         let span = staged;
         staged = null;
         if (!span) span = state.inputActions.captureInsertion();
@@ -120,10 +171,13 @@ function makeClient(React) {
         const whole = start === end;
         const text = whole ? state.draft : state.draft.slice(start, end);
         if (!text.trim()) { notices.set('error.empty-draft'); return; }
-        const chipStart = whole ? 0 : start;
-        const chipEnd = whole ? state.draft.length : end;
-        const chips = (state.occurrences ?? []).some(item => item.offset < chipEnd && item.offset + item.length > chipStart);
-        if (chips) { notices.set('error.chips'); return; }
+        // A chip or quote inside the replaced range can never be written back:
+        // DSH strips inline placeholders from external text. Refuse before the
+        // model call instead of offering an Apply that must fail.
+        if (rangeHasChip(whole ? { start: 0, end: state.draft.length } : { start, end }, state)) {
+          notices.set('error.chips', { sticky: true });
+          return;
+        }
         capture = { kind: 'optimize', span, rev: span.draftRev, whole, text };
         draft.startOptimize({ sessionId, endSeq: state.endSeq, text,
           before: state.draft.slice(Math.max(0, start - 800), start),
@@ -145,15 +199,19 @@ function makeClient(React) {
             notices.set('error.caret-moved');
             return;
           }
-          if (!actions.insertText(snapshot.text, span)) { notices.set('error.stale'); return; }
+          if (!actions.insertText(snapshot.text, span)) { notices.set('error.stale', { sticky: true }); return; }
           finish();
           return;
         }
-        if (state.draftRev !== owned.rev) { notices.set('error.stale'); return; }
+        const target = owned.whole
+          ? { start: 0, end: state.draft.length }
+          : { start: owned.span.start, end: owned.span.end };
+        if (rangeHasChip(target, state)) { notices.set('error.chips', { sticky: true }); return; }
+        if (state.draftRev !== owned.rev) { notices.set('error.stale', { sticky: true }); return; }
         const span = owned.whole
           ? { start: 0, end: state.draft.length, draftRev: owned.rev }
           : owned.span;
-        if (!actions.insertText(snapshot.text, span)) { notices.set('error.stale'); return; }
+        if (!actions.insertText(snapshot.text, span)) { notices.set('error.stale', { sticky: true }); return; }
         finish();
       },
       dismissDraft() {
@@ -307,6 +365,7 @@ function makeClient(React) {
     const phase = useInput(s => s.phase);
     const attachments = useInput(s => s.attachmentIds);
     const occurrences = useInput(s => s.occurrences);
+    const quotes = useInput(s => s.quotes);
     const running = useSession(s => s.running);
     const removed = useSession(s => s.removed);
     const openState = useSession(s => s.openState);
@@ -337,7 +396,8 @@ function makeClient(React) {
     const draftValid = !running && !removed && openState === 'open'
       && projection?.openTurn === null && phase === 'plain' && !composing && visible;
     const live = React.useRef();
-    live.current = { draft, draftRev, phase, inputActions, occurrences, attachments,
+    live.current = { draft, draftRev, phase, inputActions, occurrences, quotes, attachments,
+      inlineRanges: () => inlineRangesFromDom(root.current?.closest('[data-composer-card]')),
       history: projection?.history ?? EMPTY, endSeq: projection?.endSeq, allowed, composing,
       visible, key,
       eligible: projection?.eligible === true, draftValid };
@@ -402,6 +462,7 @@ function makeClient(React) {
       const onEdit = event => {
         if (!ownEditor(event.target)) return;
         browse.current = null;
+        assist.notices.clear();
         assist.next.pause();
         // The clarification card stays readable while the human edits the draft.
         // A pending replacement/continuation is still invalidated by typing.
@@ -752,7 +813,7 @@ function makeClient(React) {
         'error.timeout': '请求超时，请重试。', 'error.provider-error': '模型请求失败，请重试。',
         'error.empty': '没有可用的结果。', 'error.stale': '内容已变化，请重试。',
         'error.unavailable': '当前不能执行该操作。', 'error.attachments': '带附件的草稿暂不支持续写。',
-        'error.selection': '请先取消选区再续写。', 'error.chips': '包含引用内容的草稿暂不支持优化。',
+        'error.selection': '请先取消选区再续写。', 'error.chips': '草稿含引用，暂不支持整段优化；可选中不含引用的文字后再优化。',
         'error.empty-draft': '请先输入内容。', 'error.caret-moved': '光标已移动，请重新触发。',
         'error.no-prefix': '把光标放到草稿文字后面再触发续写。',
         'error.save-failed': '设置保存失败，请重试。',
@@ -795,7 +856,7 @@ function makeClient(React) {
         'error.unavailable': 'This action is not available right now.',
         'error.attachments': 'Continuation is unavailable while the draft has attachments.',
         'error.selection': 'Clear the selection before requesting a continuation.',
-        'error.chips': 'Optimization is unavailable while the draft contains references.',
+        'error.chips': 'The draft contains references, so whole-draft optimization is unavailable. Select text without references and try again.',
         'error.empty-draft': 'Type something first.', 'error.caret-moved': 'The caret moved. Trigger again.',
         'error.no-prefix': 'Place the caret after some draft text to continue.',
         'error.save-failed': 'Saving the setting failed. Try again.',

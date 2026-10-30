@@ -68,6 +68,8 @@ node verification/run.mjs \
   stays visible while editing, and closes on Close/empty draft/send.
 - A continuation trigger with the caret at the start of the draft shows the
   no-prefix notice instead of calling the model.
+- Optimization refuses a draft that quotes the transcript, and a selection that covers
+the quote, without calling the model; the refusal stays on screen.
 - The Prompt assist settings page renders its selects with a visible outline in
   both themes: the suite measures the painted colours and fails when a field
   dissolves into its card (the dark-theme regression), and keeps the dark
