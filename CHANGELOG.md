@@ -4,13 +4,17 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
-### Fixed
-
-- Optimization no longer offers an Apply it cannot deliver when the draft contains a quoted passage. Quoted text is a non-text inline node that the host never lets external text rewrite, so the replacement silently failed with "content changed". The range check now also reads the editor DOM, which is the only signal for quotes because the host publishes no quote projection; refusing keeps a notice on screen until the draft changes instead of dropping it after a moment.
+## [1.3.7] - 2026-10-30
 
 ### Fixed
 
-- The Prompt assist settings page is readable in the dark theme: select fields no longer use the same fill as their card without a border (they now take the module fill plus a hairline stroke), the dropdown chevron is more opaque, and the "configuration unavailable" hint has a real style. The browser suite now measures the painted colours in light and dark and keeps a dark-theme screenshot.
+- **Optimization no longer offers an Apply it cannot deliver when the draft quotes the transcript.** Selecting text in an assistant reply and pressing **Quote text** inserts an inline quote node; the previous range check only looked at `@` reference chips, so the request went out, an **Apply** button appeared, and applying it failed with "content changed". The check now also reads the editor DOM — the only signal for quotes, because the host publishes no quote projection — and refuses before calling the model. A refusal, and a write that fails for any other reason, now stays on screen until the draft changes instead of disappearing after a moment.
+- The Prompt assist settings page is readable in the dark theme: select fields no longer share their card's fill without a border (they take the module fill plus a hairline stroke), the dropdown chevron is more opaque, and the "configuration unavailable" hint has a real style.
+
+### Verification
+
+- Optimization now refuses both a whole-draft request and a selection that covers the transcript quote, without calling the model; the browser suite covers both on DSH `0.2.2-alpha.2` and skips them on hosts without the **Quote text** action (`0.2.1-rc.3`, `0.2.1-rc.4`).
+- The settings page is checked in both themes by measuring painted contrast and keeping a dark-theme screenshot.
 
 ## [1.3.6] - 2026-10-29
 
