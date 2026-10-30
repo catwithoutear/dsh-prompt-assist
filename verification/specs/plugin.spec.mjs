@@ -14,6 +14,11 @@ import {
 } from '../fixtures/prompts.mjs';
 
 const ARTIFACTS = process.env.ARTIFACTS_DIR || '/artifacts';
+const MOCK_STATS_URL = process.env.MOCK_STATS_URL || 'http://127.0.0.1:18090/__stats';
+const QUOTE_PROMPT = '请回复一句测试消息';
+const QUOTE_TAIL = '这段怎么理解';
+const QUOTE_REFUSAL = /whole-draft optimization is unavailable|暂不支持整段优化/;
+
 const DSH_URL = process.env.DSH_URL;
 if (!DSH_URL) throw new Error('DSH_URL is required');
 const SCREENS = join(ARTIFACTS, 'screens');
@@ -45,6 +50,20 @@ async function openComposer() {
   await dismissOnboarding();
   const composer = page.locator('[data-composer-input][contenteditable="true"]').first();
   await composer.waitFor({ timeout: 90_000 });
+  return composer;
+}
+
+/**
+ * Start every test from an empty composer. DSH persists drafts, so a previous
+ * test's draft otherwise reappears on reload and the trigger pipelines silently
+ * ignore new characters.
+ */
+async function freshComposer() {
+  const composer = await openComposer();
+  await composer.click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Backspace');
+  await expect(composer).toHaveText('');
   return composer;
 }
 
@@ -390,4 +409,100 @@ test('settings selects stay visible in light and dark themes', async () => {
     expect(sample.textRatio, `${sample.theme} select text contrast`).toBeGreaterThanOrEqual(4.5);
   }
   expect(luminance(dark.select)).toBeLessThan(luminance(light.select));
+});
+/** Optimization requests the deterministic stub has answered so far. */
+async function optimizationRequests() {
+  const response = await page.request.get(MOCK_STATS_URL);
+  if (!response.ok()) return 0;
+  const stats = await response.json();
+  return Object.entries(stats.byKind ?? {})
+    .filter(([kind]) => kind.startsWith('optimize'))
+    .reduce((total, [, count]) => total + Number(count ?? 0), 0);
+}
+
+/**
+ * Quote an assistant reply into the composer the way a human does it: select
+ * text in the transcript with the mouse, press the floating "Quote text"
+ * button, then type after the quote.
+ */
+async function quoteReplyIntoComposer(composer) {
+  await composer.click();
+  await page.keyboard.insertText(QUOTE_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).last()).toBeVisible({ timeout: 90_000 });
+  const reply = page.getByText(CHAT_REPLY).last();
+  const box = await reply.boundingBox();
+  if (box === null) throw new Error('assistant reply has no layout box');
+  await page.mouse.move(box.x + 6, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + Math.min(box.width - 4, 120), box.y + box.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await page.getByRole('button', { name: /^(Quote text|引用文本)$/ }).first().click();
+  await expect(page.locator('[data-composer-quote]').first()).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.insertText(QUOTE_TAIL);
+  await expect(composer).toHaveText(new RegExp(QUOTE_TAIL));
+}
+
+/**
+ * Whether the host offers the transcript "Quote text" action. DSH gained it in
+ * 0.2.2-alpha.2; older hosts must skip instead of reporting a regression.
+ */
+async function hostOffersQuoteAction(composer) {
+  await composer.click();
+  await page.keyboard.insertText(QUOTE_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).last()).toBeVisible({ timeout: 90_000 });
+  const reply = page.getByText(CHAT_REPLY).last();
+  const box = await reply.boundingBox();
+  if (box === null) return false;
+  await page.mouse.move(box.x + 6, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + Math.min(box.width - 4, 120), box.y + box.height / 2, { steps: 12 });
+  await page.mouse.up();
+  const button = page.getByRole('button', { name: /^(Quote text|引用文本)$/ });
+  const visible = (await button.count()) > 0 && await button.first().isVisible().catch(() => false);
+  await page.keyboard.press('Escape').catch(() => {});
+  return visible;
+}
+
+
+test('refuses whole-draft optimization while the draft quotes the transcript', async () => {
+  const composer = await freshComposer();
+  // Quoting is a host capability: probe it before spending a turn on a host without it.
+  test.skip(!(await hostOffersQuoteAction(composer)), 'this DSH host has no transcript "Quote text" action');
+
+  await quoteReplyIntoComposer(await freshComposer());
+  await page.keyboard.press('Control+End');
+
+  const before = await optimizationRequests();
+  await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
+
+  // The refusal must survive long enough to be read and must not call the model.
+  await expect(page.getByText(QUOTE_REFUSAL).first()).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(4_000);
+  await expect(page.getByText(QUOTE_REFUSAL).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /^(Apply|应用)$/ })).toHaveCount(0);
+  expect(await optimizationRequests(), 'no optimize request for a quoted draft').toBe(before);
+  await screenshot('10-quote-refusal.png');
+
+  // Typing dismisses the refusal instead of leaving it on screen.
+  await composer.click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.insertText('x');
+  await expect(page.getByText(QUOTE_REFUSAL)).toHaveCount(0);
+});
+
+test('refuses an optimization whose selection covers the quoted passage', async () => {
+  const composer = await freshComposer();
+  test.skip(!(await hostOffersQuoteAction(composer)), 'this DSH host has no transcript "Quote text" action');
+
+  await quoteReplyIntoComposer(await freshComposer());
+  await composer.click();
+  await page.keyboard.press('Control+A');
+  const before = await optimizationRequests();
+  await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
+  await expect(page.getByText(QUOTE_REFUSAL).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /^(Apply|应用)$/ })).toHaveCount(0);
+  expect(await optimizationRequests(), 'no optimize request for a quoted selection').toBe(before);
+  await screenshot('11-quote-selection-refusal.png');
 });

@@ -47,7 +47,7 @@ To update an existing install: rebuild with `npm run build`, reinstall or re-app
 5. **Automatic mode**: press the toggle shortcut or use the settings page. Automatic requests stop when it is off; manual triggers still work.
 6. **History**: press ↑ for an older prompt and ↓ for a newer one. Going past the newest entry restores the draft you started with. With text in the composer, history only shows entries starting with that prefix.
 
-While the session is running, while files or images are attached, or when the composer is not in its plain editing state, suggestions are hidden. Whole-draft optimization is unavailable while the draft contains reference chips; a selection that overlaps a chip is rejected. Continuation is not affected by chips. History restores text only.
+While the session is running, while files or images are attached, or when the composer is not in its plain editing state, suggestions are hidden. Whole-draft optimization is unavailable while the draft contains reference chips or quoted passages; a selection that overlaps either is rejected with an explanation that stays on screen until the draft changes. Continuation is not affected by chips. History restores text only.
 
 ## Settings
 

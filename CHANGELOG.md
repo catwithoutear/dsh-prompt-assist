@@ -6,6 +6,10 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ### Fixed
 
+- Optimization no longer offers an Apply it cannot deliver when the draft contains a quoted passage. Quoted text is a non-text inline node that the host never lets external text rewrite, so the replacement silently failed with "content changed". The range check now also reads the editor DOM, which is the only signal for quotes because the host publishes no quote projection; refusing keeps a notice on screen until the draft changes instead of dropping it after a moment.
+
+### Fixed
+
 - The Prompt assist settings page is readable in the dark theme: select fields no longer use the same fill as their card without a border (they now take the module fill plus a hairline stroke), the dropdown chevron is more opaque, and the "configuration unavailable" hint has a real style. The browser suite now measures the painted colours in light and dark and keeps a dark-theme screenshot.
 
 ## [1.3.6] - 2026-10-29
