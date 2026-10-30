@@ -69,7 +69,9 @@ node verification/run.mjs \
 - A continuation trigger with the caret at the start of the draft shows the
   no-prefix notice instead of calling the model.
 - Optimization refuses a draft that quotes the transcript, and a selection that covers
-the quote, without calling the model; the refusal stays on screen.
+the quote, without calling the model; the refusal stays on screen. Quoting is a host
+capability (DSH gained it in 0.2.2-alpha.2), so these two cases probe for the
+"Quote text" action and skip with a reason on hosts that do not offer it.
 - The Prompt assist settings page renders its selects with a visible outline in
   both themes: the suite measures the painted colours and fails when a field
   dissolves into its card (the dark-theme regression), and keeps the dark

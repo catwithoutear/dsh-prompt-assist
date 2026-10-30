@@ -437,16 +437,41 @@ async function quoteReplyIntoComposer(composer) {
   await page.mouse.down();
   await page.mouse.move(box.x + Math.min(box.width - 4, 120), box.y + box.height / 2, { steps: 12 });
   await page.mouse.up();
-  await page.getByRole('button', { name: /^(Quote text|引用文本)$/ }).click();
+  await page.getByRole('button', { name: /^(Quote text|引用文本)$/ }).first().click();
   await expect(page.locator('[data-composer-quote]').first()).toBeVisible({ timeout: 15_000 });
   await page.keyboard.insertText(QUOTE_TAIL);
   await expect(composer).toHaveText(new RegExp(QUOTE_TAIL));
 }
 
+/**
+ * Whether the host offers the transcript "Quote text" action. DSH gained it in
+ * 0.2.2-alpha.2; older hosts must skip instead of reporting a regression.
+ */
+async function hostOffersQuoteAction(composer) {
+  await composer.click();
+  await page.keyboard.insertText(QUOTE_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).last()).toBeVisible({ timeout: 90_000 });
+  const reply = page.getByText(CHAT_REPLY).last();
+  const box = await reply.boundingBox();
+  if (box === null) return false;
+  await page.mouse.move(box.x + 6, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + Math.min(box.width - 4, 120), box.y + box.height / 2, { steps: 12 });
+  await page.mouse.up();
+  const button = page.getByRole('button', { name: /^(Quote text|引用文本)$/ });
+  const visible = (await button.count()) > 0 && await button.first().isVisible().catch(() => false);
+  await page.keyboard.press('Escape').catch(() => {});
+  return visible;
+}
+
 
 test('refuses whole-draft optimization while the draft quotes the transcript', async () => {
   const composer = await freshComposer();
-  await quoteReplyIntoComposer(composer);
+  // Quoting is a host capability: probe it before spending a turn on a host without it.
+  test.skip(!(await hostOffersQuoteAction(composer)), 'this DSH host has no transcript "Quote text" action');
+
+  await quoteReplyIntoComposer(await freshComposer());
   await page.keyboard.press('Control+End');
 
   const before = await optimizationRequests();
@@ -469,8 +494,9 @@ test('refuses whole-draft optimization while the draft quotes the transcript', a
 
 test('refuses an optimization whose selection covers the quoted passage', async () => {
   const composer = await freshComposer();
-  await quoteReplyIntoComposer(composer);
+  test.skip(!(await hostOffersQuoteAction(composer)), 'this DSH host has no transcript "Quote text" action');
 
+  await quoteReplyIntoComposer(await freshComposer());
   await composer.click();
   await page.keyboard.press('Control+A');
   const before = await optimizationRequests();
