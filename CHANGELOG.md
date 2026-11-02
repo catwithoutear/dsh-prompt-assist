@@ -4,6 +4,8 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.3.8-rc.2] - 2026-11-02
+
 ### Fixed
 
 - Optimization works in a session that has not sent a message yet and shows its model only as the deployment default. A session records `modelSelection` only when a request header is written, so before the first turn the projection is empty and the request was rejected with "this session has no model yet". Route resolution now falls back to the `agentDefaultModel` service — the same model the composer displays — after the plugin's own configured route and the session's live selection.
