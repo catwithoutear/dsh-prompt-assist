@@ -4,6 +4,20 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-11-03
+
+Optimization in a brand-new session works again. Two separate defects stacked up: the request cursor and the model route.
+
+### Fixed
+
+- **Optimization no longer fails in a session that has not sent its first message.** The first draft could not be optimized at all. Two defects stacked: the draft carried the session's initial `endSeq` of `-1`, which the request schema rejects, so the gateway refused the call before any model request was made and the panel said "the model request failed"; and once that was fixed, a session that had not recorded a request header yet had no `modelSelection`, so the panel said "this session has no model yet" even though the composer showed the model it would use. The cursor is now normalised before it leaves the client and compared the same way on the host, and route resolution falls back to the deployment default model — the model the composer displays — after the plugin's own configured route and the session's live selection.
+- A call the gateway or transport rejects no longer reports itself as "the model request failed". It says the request never reached the model, which is what actually happened.
+
+### Verification
+
+- The browser suite runs the first-draft case on DSH `0.2.2-alpha.2`; unit tests cover the cursor clamp, the rejected call, the default-model route, and every route-resolution call site.
+- Confirmed on a real desktop profile: the first draft of a new session now returns a preview instead of an error.
+
 ## [1.3.8-rc.2] - 2026-11-02
 
 ### Fixed
