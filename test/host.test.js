@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import { PromptAssist, inject, Config } from '../src/index.js';
-import { initialState } from '../src/core.js';
+import { initialState, wireEndSeq } from '../src/core.js';
 import { createPreviewController } from '../src/preview-state.js';
 
 function setup(stream, config = {}, extras = {}) {
@@ -204,6 +204,23 @@ test('optimize uses the built-in contract and parses the MODE protocol', async (
     assert.equal(result.status, 'ready');
     assert.equal(result.mode, 'questions');
   } finally { await questions.ctx.fiber.dispose(); }
+});
+
+test('optimize works before the first turn ever ends', async () => {
+  const f = setup(streamOf('MODE: replace\n\n请说明你要检查什么。'));
+  try {
+    // A brand-new session: the projection reports the initial -1 cursor.
+    f.state.endSeq = -1;
+    f.state.eligible = false;
+    f.state.recent = [];
+    await assert.rejects(() => f.service.optimize({ sessionId: f.agent.id, endSeq: -1,
+      text: '你好', before: '你好', after: '' }), /Invalid PromptAssistOptimizeRequest/,
+    'the codec rejects -1, which is exactly why the client clamps it');
+    const result = await f.service.optimize({ sessionId: f.agent.id, endSeq: wireEndSeq(-1),
+      text: '你好', before: '你好', after: '' });
+    assert.equal(result.status, 'ready', JSON.stringify(result));
+    assert.equal(f.calls.length, 1, 'the clamped cursor reaches the model exactly once');
+  } finally { await f.ctx.fiber.dispose(); }
 });
 
 test('optimize honors the clarify strategy from volatile config', async () => {

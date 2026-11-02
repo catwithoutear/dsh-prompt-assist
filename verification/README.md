@@ -68,6 +68,8 @@ node verification/run.mjs \
   stays visible while editing, and closes on Close/empty draft/send.
 - A continuation trigger with the caret at the start of the draft shows the
   no-prefix notice instead of calling the model.
+- Optimization works on the first draft of a session that has not finished a turn
+  yet (the projection reports `endSeq: -1` there; the request codec needs >= 0).
 - Optimization refuses a draft that quotes the transcript, and a selection that covers
 the quote, without calling the model; the refusal stays on screen. Quoting is a host
 capability (DSH gained it in 0.2.2-alpha.2), so these two cases probe for the

@@ -114,6 +114,14 @@ export function inlineNodeRanges(entries) {
   }
   return ranges;
 }
+/**
+ * Wire cursor for a session projection. A session that has not completed a turn
+ * yet reports `endSeq: -1`; the request codecs require a non-negative cursor, so
+ * the value is clamped once here instead of letting the gateway reject it.
+ */
+export function wireEndSeq(endSeq) {
+  return Number.isSafeInteger(endSeq) && endSeq >= 0 ? endSeq : 0;
+}
 export function textOf(message) {
   return (message?.content ?? []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 }

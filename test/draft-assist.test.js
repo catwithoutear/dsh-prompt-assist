@@ -104,3 +104,12 @@ test('an optimize result keeps its mode for the apply/questions branch', async (
     assert.equal(snapshot.kind, 'optimize');
   } finally { store.dispose(); }
 });
+test('a rejected wire call surfaces as request-rejected, not a provider failure', async () => {
+  const assist = createDraftAssist({ call: async () => ({ ok: false, error: { code: 'gateway/input-invalid' } }) });
+  assist.sync({ valid: true, visible: true });
+  assist.startOptimize({ sessionId: 's', endSeq: 0, text: 'a', before: '', after: '' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(assist.getSnapshot().phase, 'error');
+  assert.equal(assist.getSnapshot().reason, 'request-rejected');
+  assist.dispose();
+});
