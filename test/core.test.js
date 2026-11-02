@@ -197,3 +197,21 @@ test('a session without a completed turn still sends a valid wire cursor', () =>
   assert.deepEqual(optimizeRequestCodec.create().parse({ sessionId: 's', endSeq: wireEndSeq(-1), text: 'a', before: '', after: '' }),
     { sessionId: 's', endSeq: 0, text: 'a', before: '', after: '' });
 });
+test('a session with no recorded selection falls back to the deployment default', () => {
+  const dflt = { provider: 'commandcode', model: 'deepseek/deepseek-v4.1-flash', reasoningEffort: 'max' };
+  // Brand-new session: the projection has lastUsed and pending null.
+  const empty = { lastUsed: null, pending: null };
+  const routed = routeOf({}, empty, undefined, { next: dflt });
+  assert.deepEqual(routed, { provider: dflt.provider, model: dflt.model, reasoningEffort: 'max', source: 'default' });
+  // A pending choice (made in the composer, no request header yet) still maps to the session.
+  const pending = { lastUsed: null, pending: { provider: 'p', model: 'm', reasoningEffort: 'high' } };
+  const chosen = routeOf({}, pending, undefined, { next: dflt });
+  assert.deepEqual(chosen, { provider: 'p', model: 'm', reasoningEffort: 'high', source: 'session' });
+  // A recorded selection wins over the default.
+  const used = { lastUsed: { provider: 'x', model: 'y' }, pending: null };
+  assert.equal(routeOf({}, used, undefined, { next: dflt }).provider, 'x');
+  // The configured auxiliary route still wins over everything.
+  assert.equal(routeOf({ provider: 'aux-p', model: 'aux-m' }, used, undefined, { next: dflt }).source, 'aux');
+  // Without a default and without a selection there is still nothing to route.
+  assert.equal(routeOf({}, empty, undefined, undefined).provider, undefined);
+});
