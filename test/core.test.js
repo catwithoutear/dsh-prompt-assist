@@ -4,8 +4,8 @@ import { initialState, fold, sanitize, sanitizeContinuation, parseOptimize, OPTI
   OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY, optimizeStrategy, optimizeSystem,
   continueUserMessage,
   browseHistory, selectedModel, routeOf, SYSTEM, CONTINUE_SYSTEM, viewOf, CONTINUE_MAX, OPTIMIZE_REPLACE_MAX,
-  rangeHasInlineNode, inlineNodeRanges } from '../src/core.js';
-import { requestCodec } from '../src/remote.js';
+  rangeHasInlineNode, inlineNodeRanges, wireEndSeq } from '../src/core.js';
+import { requestCodec, optimizeRequestCodec } from '../src/remote.js';
 const event = (type, data, seq = 1) => ({ type, data, seq });
 const user = text => ({ role: 'user', source: { kind: 'user-rpc' }, content: [{ type: 'text', text }] });
 const answer = (text, extra = []) => ({ turn: 1, message: { role: 'assistant', content: [{ type: 'text', text }, ...extra] } });
@@ -183,4 +183,17 @@ test('inline node offsets come from the editor walk in draft order', () => {
     { text: 'a' }, { node: {}, text: 'bb' }, { text: 'ccc' }, { node: {}, text: 'd' },
   ]);
   assert.deepEqual(two, [{ offset: 1, length: 2 }, { offset: 6, length: 1 }]);
+});
+test('a session without a completed turn still sends a valid wire cursor', () => {
+  // initialState() reports -1 until the first turn ends; the codecs require >= 0.
+  assert.equal(initialState().endSeq, -1);
+  assert.equal(wireEndSeq(-1), 0);
+  assert.equal(wireEndSeq(undefined), 0);
+  assert.equal(wireEndSeq(Number.NaN), 0);
+  assert.equal(wireEndSeq(0), 0);
+  assert.equal(wireEndSeq(7), 7);
+  // The optimizer request codec accepts the clamped cursor and rejects the raw one.
+  assert.throws(() => optimizeRequestCodec.create().parse({ sessionId: 's', endSeq: -1, text: 'a', before: '', after: '' }));
+  assert.deepEqual(optimizeRequestCodec.create().parse({ sessionId: 's', endSeq: wireEndSeq(-1), text: 'a', before: '', after: '' }),
+    { sessionId: 's', endSeq: 0, text: 'a', before: '', after: '' });
 });

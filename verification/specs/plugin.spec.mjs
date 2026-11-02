@@ -466,6 +466,19 @@ async function hostOffersQuoteAction(composer) {
 }
 
 
+test('optimizes the very first draft of a brand-new session', async () => {
+  const composer = await freshComposer();
+  // A session that has not finished a turn reports `endSeq: -1`; the request
+  // codec requires a non-negative cursor, so the client must clamp it.
+  await page.keyboard.insertText('你好');
+  await page.getByRole('button', { name: /^(Optimize|优化)$/ }).first().click();
+  await expect(page.locator('[data-prompt-assist-draft-panel][data-prompt-assist-optimize-mode="replace"]'))
+    .toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole('button', { name: /^(Apply|应用)$/ }).first()).toBeVisible();
+  await expect(page.getByText(/request was rejected|未通过校验/)).toHaveCount(0);
+  await screenshot('12-first-turn-optimize.png');
+});
+
 test('refuses whole-draft optimization while the draft quotes the transcript', async () => {
   const composer = await freshComposer();
   // Quoting is a host capability: probe it before spending a turn on a host without it.

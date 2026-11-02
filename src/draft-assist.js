@@ -38,11 +38,14 @@ export function createDraftAssist({ call }) {
         publish({ kind: '', phase: 'idle', text: '', mode: '', reason: '' });
         return;
       }
-      publish({ kind, phase: 'error', text: '', mode: '', reason: value?.reason || 'provider-error' });
+      // A call that came back as a failure record (not a business result) never
+      // reached the model: the gateway or the transport rejected it.
+      const reason = value?.reason || (result?.ok === false ? 'request-rejected' : 'provider-error');
+      publish({ kind, phase: 'error', text: '', mode: '', reason });
     } catch {
       if (disposed || active !== owned || owned.controller.signal.aborted) return;
       active = undefined;
-      publish({ kind, phase: 'error', text: '', mode: '', reason: 'provider-error' });
+      publish({ kind, phase: 'error', text: '', mode: '', reason: 'request-rejected' });
     }
   }
   return {

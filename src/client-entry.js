@@ -155,7 +155,7 @@ function makeClient(React) {
         if (span.start !== span.end) { notices.set('error.selection'); return; }
         if (!state.draft.slice(0, span.start).trim()) { notices.set('error.no-prefix'); return; }
         capture = { kind: 'continuation', span, rev: span.draftRev, at: span.start };
-        draft.startContinuation({ sessionId, endSeq: state.endSeq,
+        draft.startContinuation({ sessionId, endSeq: wireEndSeq(state.endSeq),
           prefix: state.draft.slice(0, span.start), suffix: state.draft.slice(span.end) });
       },
       optimize() {
@@ -179,7 +179,7 @@ function makeClient(React) {
           return;
         }
         capture = { kind: 'optimize', span, rev: span.draftRev, whole, text };
-        draft.startOptimize({ sessionId, endSeq: state.endSeq, text,
+        draft.startOptimize({ sessionId, endSeq: wireEndSeq(state.endSeq), text,
           before: state.draft.slice(Math.max(0, start - 800), start),
           after: state.draft.slice(end, end + 800) });
       },
@@ -389,7 +389,7 @@ function makeClient(React) {
     const selectedRoute = selection?.next ?? selection?.lastUsed;
     const routeProvider = configValue.provider || selectedRoute?.provider || '';
     const routeModel = configValue.model || selectedRoute?.model || '';
-    const key = JSON.stringify([sessionId, projection?.endSeq, routeProvider, routeModel]);
+    const key = JSON.stringify([sessionId, wireEndSeq(projection?.endSeq), routeProvider, routeModel]);
     const valid = !running && !removed && openState === 'open'
       && projection?.eligible === true && projection.openTurn === null;
     const allowed = valid && phase === 'plain' && draft === '' && !(attachments?.length);
@@ -429,7 +429,7 @@ function makeClient(React) {
 
     React.useEffect(() => {
       assist.next.sync({ key, valid, visible: allowed && visible && !composing, ready: !!api,
-        auto, request: { sessionId, endSeq: projection?.endSeq } });
+        auto, request: { sessionId, endSeq: wireEndSeq(projection?.endSeq) } });
     }, [assist, key, valid, allowed, visible, composing, api, auto, projection?.endSeq, sessionId]);
     React.useEffect(() => {
       // Clarification questions must survive IME composition while the human edits,
@@ -811,6 +811,7 @@ function makeClient(React) {
         'error.invalid-output': '模型输出格式不符合要求，请重试。',
         'error.limit': '输出超出长度限制，请缩短文本后重试。',
         'error.timeout': '请求超时，请重试。', 'error.provider-error': '模型请求失败，请重试。',
+        'error.request-rejected': '插件与 DSH 的请求未通过校验，未发出模型调用；请更新插件或反馈此问题。',
         'error.empty': '没有可用的结果。', 'error.stale': '内容已变化，请重试。',
         'error.unavailable': '当前不能执行该操作。', 'error.attachments': '带附件的草稿暂不支持续写。',
         'error.selection': '请先取消选区再续写。', 'error.chips': '草稿含引用，暂不支持整段优化；可选中不含引用的文字后再优化。',
@@ -852,6 +853,7 @@ function makeClient(React) {
         'error.limit': 'The output exceeded the length limit. Shorten the text and retry.',
         'error.timeout': 'The request timed out. Try again.',
         'error.provider-error': 'The model request failed. Try again.',
+        'error.request-rejected': 'The request was rejected before any model call. Update the plugin or report this.',
         'error.empty': 'No usable result was produced.', 'error.stale': 'The content changed. Try again.',
         'error.unavailable': 'This action is not available right now.',
         'error.attachments': 'Continuation is unavailable while the draft has attachments.',

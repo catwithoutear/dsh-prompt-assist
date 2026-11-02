@@ -3,7 +3,7 @@ import Schema from '@deepseek-ai/schemastery';
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY,
   optimizeSystem, continueUserMessage, readVolatile, initialState, fold, viewOf,
-  sanitize, sanitizeContinuation, parseOptimize, lowestEffort,
+  sanitize, sanitizeContinuation, parseOptimize, lowestEffort, wireEndSeq,
   routeOf, isHuman } from './core.js';
 import { descriptor, continueDescriptor, optimizeDescriptor, modelsDescriptor,
   requestCodec, continueRequestCodec, optimizeRequestCodec, modelsRequestCodec } from './remote.js';
@@ -131,7 +131,7 @@ export class PromptAssist extends TypertRemoteService {
     const current = () => {
       const now = ctx.sessionProjections.stateOf(session, PROJECTION);
       return ctx.agents.get(agent.id) === agent && agent.status === 'idle'
-        && now?.eligible && now.openTurn === null && now.endSeq === request.endSeq
+        && now?.eligible && now.openTurn === null && wireEndSeq(now.endSeq) === request.endSeq
         && !agent.inbox.nextTurn.length && !agent.inbox.nextStep.length;
     };
     if (!current()) return { status: 'stale', text: '' };
@@ -218,7 +218,7 @@ export class PromptAssist extends TypertRemoteService {
     if (!agent || runtime.disposed) return reasonResult('unavailable', 'stale');
     const session = agent.session;
     const state = ctx.sessionProjections.stateOf(session, PROJECTION);
-    if (agent.status !== 'idle' || state?.endSeq !== request.endSeq || state.openTurn !== null) {
+    if (agent.status !== 'idle' || wireEndSeq(state?.endSeq) !== request.endSeq || state.openTurn !== null) {
       return reasonResult('stale', 'stale');
     }
     const running = controllerFor(signal, 30000);
@@ -275,7 +275,7 @@ export class PromptAssist extends TypertRemoteService {
     if (!agent || runtime.disposed) return optimizeResult('unavailable', 'stale');
     const session = agent.session;
     const state = ctx.sessionProjections.stateOf(session, PROJECTION);
-    if (state && state.endSeq !== request.endSeq) return optimizeResult('stale', 'stale');
+    if (state && wireEndSeq(state.endSeq) !== request.endSeq) return optimizeResult('stale', 'stale');
     const entry = this.start(runtime.optimize, agent, controllerFor(signal, 60000));
     const promise = (async () => {
       try {

@@ -4,6 +4,11 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- Optimizing the first draft of a session that has not finished a turn yet no longer fails with a misleading "model request failed". The projection reports `endSeq: -1` before the first turn ends, while the request codec only accepts a non-negative cursor, so the gateway rejected the call before any model request was made. The cursor is now normalised before it leaves the client and compared the same way on the host, and a call that never reached the model reports "request rejected" instead of "the model request failed".
+
+
 ## [1.3.7] - 2026-10-30
 
 ### Fixed
