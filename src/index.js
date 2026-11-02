@@ -8,7 +8,7 @@ import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, OPTIMIZE_STRATEGIES, DEFA
 import { descriptor, continueDescriptor, optimizeDescriptor, modelsDescriptor,
   requestCodec, continueRequestCodec, optimizeRequestCodec, modelsRequestCodec } from './remote.js';
 
-export const inject = ['llm', 'agents', 'sessionProjections', 'typert'];
+export const inject = ['llm', 'agents', 'sessionProjections', 'typert', 'agentDefaultModel'];
 export const Config = Schema.object({
   provider: Schema.string().default('').volatile(),
   model: Schema.string().default('').volatile(),
@@ -90,10 +90,21 @@ export class PromptAssist extends TypertRemoteService {
     ctx.on('agent/disposed', ({ agent }) => invalidate(agent.id));
   }
 
+  /**
+   * The deployment default model, used only when the session has recorded no
+   * selection yet. Reads through the injected service so a changed default is
+   * picked up without a restart.
+   */
+  defaultSelection() {
+    const service = this.ctx.agentDefaultModel;
+    if (!service || typeof service.currentSelection !== 'function') return undefined;
+    try { return service.currentSelection(); } catch { return undefined; }
+  }
+
   /** Resolve the effective model route and its cheapest supported reasoning effort. */
   async route(kind, session, signal) {
     const selection = this.ctx.sessionProjections.stateOf(session, 'modelSelection');
-    const route = routeOf(this.config, selection, session);
+    const route = routeOf(this.config, selection, session, this.defaultSelection());
     if (!route.provider || !route.model) return { error: 'no-model' };
     let info;
     try { info = await this.ctx.llm.resolveModelInfo(route.provider, route.model, signal); }
@@ -135,7 +146,8 @@ export class PromptAssist extends TypertRemoteService {
         && !agent.inbox.nextTurn.length && !agent.inbox.nextStep.length;
     };
     if (!current()) return { status: 'stale', text: '' };
-    const route = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session);
+    const route = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
+      this.defaultSelection());
     if (!route.provider || !route.model) return { status: 'unavailable', text: '' };
     const key = JSON.stringify([request.endSeq, route.provider, route.model]);
     let item = runtime.cache.get(agent.id);
@@ -171,7 +183,8 @@ export class PromptAssist extends TypertRemoteService {
               finished = true;
             }
           }
-          const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session);
+          const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
+            this.defaultSelection());
           if (!current() || owned.controller.signal.aborted
             || nextRoute.provider !== route.provider || nextRoute.model !== route.model) return { status: 'stale', text: '' };
           const text = finished ? sanitize(raw) : '';
@@ -248,7 +261,8 @@ export class PromptAssist extends TypertRemoteService {
           }
         }
         if (!current()) return reasonResult('stale', 'stale');
-        const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session);
+        const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
+          this.defaultSelection());
         if (nextRoute.provider !== route.provider || nextRoute.model !== route.model) {
           return reasonResult('stale', 'stale');
         }
@@ -301,7 +315,8 @@ export class PromptAssist extends TypertRemoteService {
         }
         if (entry.controller.signal.aborted) return optimizeResult('stale', 'stale');
         if (!finished) return optimizeResult('unavailable', 'empty');
-        const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session);
+        const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
+          this.defaultSelection());
         if (nextRoute.provider !== route.provider || nextRoute.model !== route.model) {
           return optimizeResult('stale', 'stale');
         }

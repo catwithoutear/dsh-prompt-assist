@@ -18,6 +18,7 @@ function setup(stream, config = {}, extras = {}) {
   ctx.provide('agents', { get: id => id === agent.id ? agent : undefined });
   ctx.provide('sessionProjections', { stateOf: (_session, key) => key === 'localPromptAssist' ? state : selection });
   if (extras.skills) ctx.provide('skills', extras.skills);
+  if (extras.agentDefaultModel) ctx.provide('agentDefaultModel', extras.agentDefaultModel);
   ctx.provide('llm', {
     resolveModelInfo: extras.resolveModelInfo ?? (async () => ({ reasoning: { efforts: [{ id: 'low' }] } })),
     stream(options) { calls.push(options); return stream(options); },
@@ -204,6 +205,22 @@ test('optimize uses the built-in contract and parses the MODE protocol', async (
     assert.equal(result.status, 'ready');
     assert.equal(result.mode, 'questions');
   } finally { await questions.ctx.fiber.dispose(); }
+});
+
+test('a brand-new session routes through the deployment default model', async () => {
+  const f = setup(streamOf('MODE: replace\n\n请说明要检查什么。'),
+    {}, { selection: { lastUsed: null, pending: null },
+      agentDefaultModel: { currentSelection: () => ({ provider: 'commandcode', model: 'deepseek/deepseek-v4.1-flash', reasoningEffort: 'max' }) } });
+  try {
+    // A brand-new session: the projection has never recorded a request header.
+    f.state.endSeq = -1;
+    const result = await f.service.optimize({ sessionId: f.agent.id, endSeq: wireEndSeq(-1),
+      text: '你好', before: '你好', after: '' });
+    assert.equal(result.status, 'ready', JSON.stringify(result));
+    assert.equal(f.calls[0].provider, 'commandcode');
+    assert.equal(f.calls[0].model, 'deepseek/deepseek-v4.1-flash');
+    assert.equal(f.calls[0].reasoningEffort, undefined, 'optimize leaves effort to the provider');
+  } finally { await f.ctx.fiber.dispose(); }
 });
 
 test('optimize works before the first turn ever ends', async () => {
