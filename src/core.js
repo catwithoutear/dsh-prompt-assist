@@ -142,8 +142,14 @@ export function resolveSelection(config) {
   const raw = readVolatile(config?.fragments);
   if (raw !== undefined && raw !== null && !Array.isArray(raw)) return { error: 'invalid-fragments' };
   const fragments = Array.isArray(raw) ? raw : [];
-  const directionId = readVolatile(config?.directionId) || DEFAULT_DIRECTION_ID;
-  const styleId = readVolatile(config?.styleId) || DEFAULT_STYLE_ID;
+  const configuredDirection = readVolatile(config?.directionId);
+  const configuredStyle = readVolatile(config?.styleId);
+  // Only an absent value means "use the seed default"; an explicit empty id is a
+  // broken selection and must stop generation instead of silently defaulting.
+  const directionId = configuredDirection === undefined || configuredDirection === null
+    ? DEFAULT_DIRECTION_ID : configuredDirection;
+  const styleId = configuredStyle === undefined || configuredStyle === null
+    ? DEFAULT_STYLE_ID : configuredStyle;
   const direction = resolveFragment(fragments, 'direction', directionId);
   const style = resolveFragment(fragments, 'style', styleId);
   if (direction.error) return { error: direction.error };
