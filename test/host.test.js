@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import { PromptAssist, inject, Config } from '../src/index.js';
-import { initialState, wireEndSeq } from '../src/core.js';
+import { initialState, wireEndSeq, DEFAULT_DIRECTION_ID, DEFAULT_STYLE_ID, readVolatile } from '../src/core.js';
 import { createPreviewController } from '../src/preview-state.js';
+import { PUBLISHED_1308 } from './fixtures/published-1308.mjs';
 
 function setup(stream, config = {}, extras = {}) {
   const ctx = new Context();
@@ -318,6 +319,194 @@ test('predict uses the configured auxiliary route when one is set', async () => 
     assert.equal(f.calls[0].provider, 'aux-provider');
     assert.equal(f.calls[0].model, 'aux-model');
   } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('predict sends the assembled default prompt byte for byte', async () => {
+  const f = setup(answer);
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.equal(f.calls[0].system, PUBLISHED_1308);
+    assert.equal(f.calls[0].messages[0].content[0].text, JSON.stringify(f.state.recent));
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('a different direction invalidates the cached candidate instead of reusing it', async () => {
+  const f = setup(answer);
+  try {
+    const request = { sessionId: f.agent.id, endSeq: 9 };
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 1);
+    f.service.config.directionId = 'challenge';
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 2, 'the cached default candidate must not answer for a new direction');
+    assert.match(f.calls[1].system, /Target: the one claim/);
+    assert.doesNotMatch(f.calls[1].system, /If the assistant asks a question/);
+    assert.equal(f.calls[1].messages[0].content[0].text, JSON.stringify(f.state.recent));
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('a selected style changes wording and keeps the direction target', async () => {
+  const f = setup(answer, { styleId: 'precise' });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.match(f.calls[0].system, /Expression: name the boundary/);
+    assert.match(f.calls[0].system, /If the assistant asks a question/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('an unknown or disabled selection is refused without calling the model', async () => {
+  const unknown = setup(answer, { directionId: 'missing' });
+  try {
+    const result = await unknown.service.predict({ sessionId: unknown.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(unknown.calls.length, 0);
+  } finally { await unknown.ctx.fiber.dispose(); }
+  const disabled = setup(answer, { directionId: 'own', fragments: [
+    { id: 'own', kind: 'direction', name: 'Own', instruction: 'Ask one question.', enabled: false },
+  ] });
+  try {
+    const result = await disabled.service.predict({ sessionId: disabled.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(disabled.calls.length, 0);
+  } finally { await disabled.ctx.fiber.dispose(); }
+});
+
+test('a user fragment keeps conversation text out of the system prompt', async () => {
+  const f = setup(answer, { directionId: 'own', fragments: [
+    { id: 'own', kind: 'direction', name: 'Own', instruction: 'Ask about {{last_assistant_answer}}.',
+      enabled: true, revision: 2 },
+  ] });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.match(f.calls[0].system, /Ask about \[data:last_assistant_answer\]\./);
+    assert.doesNotMatch(f.calls[0].system, /测试已经写好/);
+    const message = f.calls[0].messages[0].content[0].text;
+    assert.ok(message.startsWith(JSON.stringify(f.state.recent)));
+    assert.match(message, /"last_assistant_answer":"测试已经写好"/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('changing the direction mid-stream discards the late prediction', async () => {
+  let proceed;
+  const gate = new Promise(resolve => { proceed = resolve; });
+  const f = setup(async function* () { await gate; yield* answer(); });
+  try {
+    const pending = f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    await Promise.resolve(); await Promise.resolve();
+    f.service.config.directionId = 'challenge';
+    proceed();
+    assert.equal((await pending).status, 'stale');
+    assert.equal(f.calls.length, 1);
+  } finally { proceed(); await f.ctx.fiber.dispose(); }
+});
+
+test('a different style invalidates the cached candidate', async () => {
+  const f = setup(answer);
+  try {
+    const request = { sessionId: f.agent.id, endSeq: 9 };
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 1);
+    f.service.config.styleId = 'precise';
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 2, 'the cached default candidate must not answer for a new style');
+    assert.match(f.calls[1].system, /Expression: name the boundary/);
+    assert.match(f.calls[1].system, /If the assistant asks a question/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('changing the style mid-stream discards the late prediction', async () => {
+  let proceed;
+  const gate = new Promise(resolve => { proceed = resolve; });
+  const f = setup(async function* () { await gate; yield* answer(); });
+  try {
+    const pending = f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    await Promise.resolve(); await Promise.resolve();
+    f.service.config.styleId = 'precise';
+    proceed();
+    assert.equal((await pending).status, 'stale');
+  } finally { proceed(); await f.ctx.fiber.dispose(); }
+});
+
+test('changing a fragment revision mid-stream discards the late prediction', async () => {
+  let proceed;
+  const gate = new Promise(resolve => { proceed = resolve; });
+  const own = { id: 'own', kind: 'direction', name: 'Own', instruction: 'Ask one question.',
+    enabled: true, revision: 1 };
+  const f = setup(async function* () { await gate; yield* answer(); },
+    { directionId: 'own', fragments: [own] });
+  try {
+    const pending = f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    await Promise.resolve(); await Promise.resolve();
+    f.service.config.fragments[0] = { ...own, revision: 2 };
+    proceed();
+    assert.equal((await pending).status, 'stale');
+  } finally { proceed(); await f.ctx.fiber.dispose(); }
+});
+
+test('an over-budget template selection is refused before any model call', async () => {
+  const placeholder = '{{last_assistant_answer}}';
+  const f = setup(answer, { directionId: 'big', styleId: 'big-style', fragments: [
+    { id: 'big', kind: 'direction', name: 'Big',
+      instruction: placeholder + 'a'.repeat(4000 - placeholder.length), enabled: true, revision: 1 },
+    { id: 'big-style', kind: 'style', name: 'BigStyle', instruction: 'b'.repeat(4000),
+      enabled: true, revision: 1 },
+  ] });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(f.calls.length, 0);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('an invalid selection does not discard a valid cached candidate', async () => {
+  const f = setup(answer);
+  try {
+    const request = { sessionId: f.agent.id, endSeq: 9 };
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 1);
+    f.service.config.directionId = 'missing';
+    assert.equal((await f.service.predict(request)).status, 'unavailable');
+    assert.equal(f.calls.length, 1);
+    f.service.config.directionId = 'natural-followup';
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 1, 'the valid candidate survived the rejected selection');
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('an invalid selection does not abort an in-flight generation', async () => {
+  let proceed;
+  const gate = new Promise(resolve => { proceed = resolve; });
+  const f = setup(async function* () { await gate; yield* answer(); });
+  try {
+    const pending = f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    await Promise.resolve(); await Promise.resolve();
+    f.service.config.directionId = 'missing';
+    assert.equal(f.calls[0].signal.aborted, false);
+    proceed();
+    assert.equal((await pending).status, 'stale');
+  } finally { proceed(); await f.ctx.fiber.dispose(); }
+});
+
+test('the resolved Config defaults drive the published prompt', async () => {
+  const resolved = Config({});
+  assert.equal(readVolatile(resolved.directionId), DEFAULT_DIRECTION_ID);
+  assert.equal(readVolatile(resolved.styleId), DEFAULT_STYLE_ID);
+  assert.deepEqual(readVolatile(resolved.fragments), []);
+  const f = setup(answer, resolved);
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.equal(f.calls[0].system, PUBLISHED_1308);
+    assert.equal(f.calls[0].messages[0].content[0].text, JSON.stringify(f.state.recent));
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('the Config schema rejects incomplete fragments', () => {
+  assert.throws(() => Config({ fragments: [{}] }), /fragments\[0\]\.id missing required value/);
+  assert.throws(() => Config({ fragments: [{ id: 'x', name: 'n' }] }), /instruction/);
 });
 
 test('a session that had no model and picked one later optimizes instead of reporting no model', async () => {
