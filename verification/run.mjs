@@ -56,6 +56,8 @@ for (const version of versions) {
       '--tag', tag,
     ];
     if (downloadHost) buildArgs.push('--build-arg', `PLAYWRIGHT_DOWNLOAD_HOST=${downloadHost}`);
+    const pins = versionsDoc.pins?.[version];
+    if (pins !== undefined) buildArgs.push('--build-arg', `DSH_PINS=${JSON.stringify(pins)}`);
     buildArgs.push('.');
     console.log(`\n=== building ${tag} ===`);
     const build = spawnSync('docker', buildArgs, { cwd: root, stdio: 'inherit' });

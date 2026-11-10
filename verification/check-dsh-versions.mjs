@@ -178,6 +178,24 @@ try {
     if (!listed.includes(version)) throw new Error(`nodeImages version ${version} is not listed in versions`);
     if (typeof image !== 'string' || image.trim() === '') throw new Error(`nodeImages[${version}] must be a non-empty string`);
   }
+  const pins = versionsDoc.pins;
+  if (pins !== undefined) {
+    if (pins === null || typeof pins !== 'object' || Array.isArray(pins)) {
+      throw new Error('verification/dsh-versions.json "pins" must be an object');
+    }
+    for (const [version, map] of Object.entries(pins)) {
+      if (!listed.includes(version)) throw new Error(`pins version ${version} is not listed in versions`);
+      if (map === null || typeof map !== 'object' || Array.isArray(map) || Object.keys(map).length === 0) {
+        throw new Error(`pins[${version}] must be a non-empty object`);
+      }
+      for (const [name, pin] of Object.entries(map)) {
+        if (!name.startsWith('@')) throw new Error(`pins[${version}] package ${name} must be scoped`);
+        if (typeof pin !== 'string' || pin.trim() === '') {
+          throw new Error(`pins[${version}][${name}] must be a non-empty version`);
+        }
+      }
+    }
+  }
   result.listed = listed;
 
   if (!offline) {

@@ -58,8 +58,13 @@ RUN npm ci --no-audit --no-fund \
 
 # Everything above is shared by the matrix; only the DSH host changes per cell.
 ARG DSH_VERSION
+# JSON map of host packages to pin back to the versions this DSH release was
+# verified against; see dsh-versions.json "pins".
+ARG DSH_PINS=
 RUN test -n "${DSH_VERSION}" || (echo "DSH_VERSION build arg is required" >&2; exit 1)
+COPY verification/pin-dsh-deps.mjs /tmp/pin-dsh-deps.mjs
 RUN npm install -g "@deepseek-ai/dsh@${DSH_VERSION}" \
+  && if [ -n "${DSH_PINS}" ]; then node /tmp/pin-dsh-deps.mjs "${DSH_PINS}"; fi \
   && npm cache clean --force
 
 COPY verification/ ./

@@ -40,6 +40,25 @@ Artifacts land in `verification/artifacts/<dsh-version>/` (gitignored):
 | `llm-requests.jsonl` / `llm-stats.json` | deterministic model requests and counts |
 | `entry.log` | DSH, Node, npm, pnpm, and install versions |
 
+## Pinned host dependencies
+
+DSH declares its Cordis/Schemastery stack with pre-release tilde ranges
+(`~4.0.6-alpha.1`), so `npm install -g` picks up a later alpha patch of the same
+version even though that DSH release was verified against the earlier one. For
+`0.2.2-alpha.2` the alpha.2 patches break agent-preset mounting and every
+session creation fails, so the matrix pins the host back per version:
+
+```json
+"pins": {
+  "0.2.2-alpha.2": { "@deepseek-ai/cordis": "4.0.6-alpha.1" }
+}
+```
+
+`verification/pin-dsh-deps.mjs` replaces exactly those packages inside the
+installed host after the global install and fails the build when the installed
+version does not match. Add entries only for versions whose transitive
+pre-releases drifted; stable ranges need none.
+
 If the host npm registry is slow, use mirrors:
 
 ```sh
