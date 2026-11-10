@@ -145,6 +145,7 @@ function makeClient(React) {
         if (state.phase !== 'plain' || state.composing) { notices.set('error.unavailable'); return; }
         if (state.draft === '') {
           if (!state.eligible) { notices.set('error.unavailable'); return; }
+          if (state.fragmentInvalid) { notices.set('error.fragment-invalid', { sticky: true }); return; }
           next.trigger();
           return;
         }
@@ -386,6 +387,12 @@ function makeClient(React) {
     );
     const configValue = config?.value ?? {};
     const auto = configValue.autoPredict !== false;
+    const fragmentSelection = resolveSelection(configValue);
+    const fragmentInvalid = !!fragmentSelection.error;
+    // Identity only covers the selected guidance and style; the preview key stays
+    // untouched so a settings change never starts a model request by itself.
+    const fragmentKey = fragmentInvalid
+      ? 'invalid' : fragmentIdentity(fragmentSelection.direction, fragmentSelection.style);
     const selectedRoute = selection?.next ?? selection?.lastUsed;
     const routeProvider = configValue.provider || selectedRoute?.provider || '';
     const routeModel = configValue.model || selectedRoute?.model || '';
@@ -399,7 +406,7 @@ function makeClient(React) {
     live.current = { draft, draftRev, phase, inputActions, occurrences, quotes, attachments,
       inlineRanges: () => inlineRangesFromDom(root.current?.closest('[data-composer-card]')),
       history: projection?.history ?? EMPTY, endSeq: projection?.endSeq, allowed, composing,
-      visible, key,
+      visible, key, fragmentInvalid,
       eligible: projection?.eligible === true, draftValid };
     assist.bind(live.current);
 
@@ -427,10 +434,19 @@ function makeClient(React) {
       return () => observer.disconnect();
     }, [sessionId]);
 
+    const fragmentRef = React.useRef(fragmentKey);
     React.useEffect(() => {
-      assist.next.sync({ key, valid, visible: allowed && visible && !composing, ready: !!api,
+      if (fragmentRef.current === fragmentKey) return;
+      fragmentRef.current = fragmentKey;
+      // Drop the candidate the previous selection produced. Switching settings
+      // must not cost a model call: the next turn end or a manual trigger rebuilds.
+      assist.next.dismiss();
+    }, [assist, fragmentKey]);
+    React.useEffect(() => {
+      assist.next.sync({ key, valid, visible: allowed && visible && !composing, ready: !!api && !fragmentInvalid,
         auto, request: { sessionId, endSeq: wireEndSeq(projection?.endSeq) } });
-    }, [assist, key, valid, allowed, visible, composing, api, auto, projection?.endSeq, sessionId]);
+    }, [assist, key, valid, allowed, visible, composing, api, auto, fragmentInvalid,
+      projection?.endSeq, sessionId]);
     React.useEffect(() => {
       // Clarification questions must survive IME composition while the human edits,
       // but not an empty draft, a running turn, or a closed composer.
@@ -657,6 +673,12 @@ function makeClient(React) {
     );
     const [models, setModels] = React.useState(EMPTY_MODELS);
     const [saveError, setSaveError] = React.useState(false);
+    const [savedSelection, setSavedSelection] = React.useState('');
+    React.useEffect(() => {
+      if (!savedSelection) return undefined;
+      const timer = setTimeout(() => setSavedSelection(''), 2600);
+      return () => clearTimeout(timer);
+    }, [savedSelection]);
     React.useEffect(() => {
       if (!api) { setModels({ status: 'loading', providers: [] }); return () => {}; }
       const controller = new AbortController();
@@ -684,6 +706,29 @@ function makeClient(React) {
       .filter(row => row.id === 'dsh-prompt-assist.predict' || row.id === 'dsh-prompt-assist.toggle-auto');
     const setField = (field, next) => {
       void Promise.resolve(configForm.set(field, next)).then(ok => setSaveError(!ok), () => setSaveError(true));
+    };
+    const setSelection = (field, next) => {
+      void Promise.resolve(configForm.set(field, next)).then(ok => {
+        if (ok) setSavedSelection(field); else setSaveError(true);
+      }, () => setSaveError(true));
+    };
+    const fragment = resolveSelection(value);
+    const directionId = typeof value.directionId === 'string' && value.directionId
+      ? value.directionId : DEFAULT_DIRECTION_ID;
+    const styleId = typeof value.styleId === 'string' && value.styleId ? value.styleId : DEFAULT_STYLE_ID;
+    const optionsFor = (seeds, kind) => {
+      const rows = seeds.map(item => ({ id: item.id, label: translate(`seed.${item.id}`) }));
+      for (const item of Array.isArray(value.fragments) ? value.fragments : []) {
+        if (!item || item.kind !== kind || item.enabled === false
+          || typeof item.id !== 'string' || !item.id) continue;
+        rows.push({ id: item.id, label: typeof item.name === 'string' && item.name ? item.name : item.id });
+      }
+      return rows;
+    };
+    const optionRows = (rows, selected) => {
+      const list = rows.some(row => row.id === selected)
+        ? rows : [{ id: selected, label: translate('settings.fragmentInvalidOption') }, ...rows];
+      return list.map(row => h('option', { key: row.id, value: row.id }, row.label));
     };
     const clearRoute = () => {
       void Promise.all([configForm.unset('provider'), configForm.unset('model')])
@@ -742,6 +787,28 @@ function makeClient(React) {
                 h('option', { value: 'expand' }, translate('settings.optimizeExpand'))))),
           h('span', { className: 'dsh-pa-desc' }, translate('settings.optimizeHint')))),
       h('section', { className: 'dsh-pa-group' },
+        h('h3', { className: 'dsh-pa-group-title' }, translate('settings.group.next')),
+        h('div', { className: 'dsh-pa-card' },
+          fragment.error && h('span', { className: 'dsh-pa-desc dsh-pa-inline-error', role: 'alert' },
+            translate('settings.fragmentInvalid')),
+          h('div', { className: 'dsh-pa-field' },
+            h('span', { className: 'dsh-pa-field-label' }, translate('settings.direction')),
+            h('span', { className: 'dsh-pa-select-wrap' },
+              h('select', { className: 'dsh-pa-select', value: directionId,
+                'aria-label': translate('settings.direction'),
+                onChange: event => setSelection('directionId', event.target.value) },
+                optionRows(optionsFor(DIRECTIONS, 'direction'), directionId)))),
+          h('span', { className: 'dsh-pa-desc' }, translate('settings.directionHint')),
+          h('div', { className: 'dsh-pa-field' },
+            h('span', { className: 'dsh-pa-field-label' }, translate('settings.style')),
+            h('span', { className: 'dsh-pa-select-wrap' },
+              h('select', { className: 'dsh-pa-select', value: styleId,
+                'aria-label': translate('settings.style'),
+                onChange: event => setSelection('styleId', event.target.value) },
+                optionRows(optionsFor(STYLES, 'style'), styleId)))),
+          h('span', { className: 'dsh-pa-desc' }, translate('settings.styleHint')),
+          savedSelection && h('span', { className: 'dsh-pa-desc' }, translate('settings.nextSaved')))),
+      h('section', { className: 'dsh-pa-group' },
         h('h3', { className: 'dsh-pa-group-title' }, translate('settings.group.shortcuts')),
         shortcutRows.map(row => h('div', { key: row.id, className: 'dsh-pa-row' },
           h('span', { className: 'dsh-pa-title' }, row.label),
@@ -799,6 +866,16 @@ function makeClient(React) {
         'settings.group.automation': '自动预测', 'settings.group.model': '辅助模型', 'settings.group.shortcuts': '快捷键',
         'settings.modelRow': '模型', 'settings.modelDefault': '使用提供商默认模型',
         'settings.modelHint': '默认跟随会话模型；选择其他模型后，下一句、续写与优化都用它生成。',
+        'settings.group.next': '下一句预测',
+        'settings.direction': '引导方向', 'settings.style': '表达风格',
+        'settings.directionHint': '决定建议问什么；切换后对下一次建议生效。',
+        'settings.styleHint': '决定建议怎么问，不改变追问对象。',
+        'settings.nextSaved': '已保存，将用于下一次建议。',
+        'settings.fragmentInvalid': '当前选择的方向或风格已失效，请重新选择。',
+        'settings.fragmentInvalidOption': '（已失效）',
+        'seed.natural-followup': '自然延续', 'seed.challenge': '质疑',
+        'seed.alternative': '替代路径', 'seed.action': '行动推进',
+        'seed.concise': '简洁直接', 'seed.precise': '严谨工程化',
         'settings.group.optimize': '优化策略', 'settings.optimizeStrategy': '优化方向',
         'settings.optimizeClarify': '澄清优化', 'settings.optimizeExpand': '忠实扩写',
         'settings.optimizeHint': '澄清优化只消除歧义，几乎不改写；忠实扩写会调整用词、补出草稿已经蕴含的细节，但不会新增目标或验收标准。',
@@ -820,6 +897,7 @@ function makeClient(React) {
         'error.save-failed': '设置保存失败，请重试。',
         'notice.auto-on': '自动提示词预测已开启。', 'notice.auto-off': '自动提示词预测已关闭。',
         'error.predict-failed': '提示词预测失败，请重试或检查设置。',
+        'error.fragment-invalid': '当前方向或风格已失效，请到设置页重新选择。',
       });
       ctx.locale.register(NS, 'en', {
         'preview.label': 'Suggested next prompt', 'preview.accept': 'Tab to accept · Esc to dismiss',
@@ -840,6 +918,16 @@ function makeClient(React) {
         'settings.group.automation': 'Automation', 'settings.group.model': 'Auxiliary model', 'settings.group.shortcuts': 'Shortcuts',
         'settings.modelRow': 'Model', 'settings.modelDefault': 'Use the provider default',
         'settings.modelHint': 'Follows the session model by default; when another model is selected it also generates previews, continuations and optimizations.',
+        'settings.group.next': 'Next prompt',
+        'settings.direction': 'Guidance', 'settings.style': 'Expression style',
+        'settings.directionHint': 'What the suggestion asks about; applies to the next suggestion.',
+        'settings.styleHint': 'How the suggestion is worded; the target does not change.',
+        'settings.nextSaved': 'Saved. Applies to the next suggestion.',
+        'settings.fragmentInvalid': 'The selected guidance or style is unavailable. Pick another one.',
+        'settings.fragmentInvalidOption': '(unavailable)',
+        'seed.natural-followup': 'Natural continuation', 'seed.challenge': 'Challenge',
+        'seed.alternative': 'Alternative path', 'seed.action': 'Next action',
+        'seed.concise': 'Concise', 'seed.precise': 'Precise',
         'settings.group.optimize': 'Optimization strategy', 'settings.optimizeStrategy': 'Direction',
         'settings.optimizeClarify': 'Clarify only', 'settings.optimizeExpand': 'Faithful expand',
         'settings.optimizeHint': 'Clarify only removes ambiguity and barely rewrites. Faithful expand improves wording and makes already-implied details explicit without adding goals or acceptance criteria.',
@@ -864,6 +952,7 @@ function makeClient(React) {
         'error.save-failed': 'Saving the setting failed. Try again.',
         'notice.auto-on': 'Automatic prompt prediction is on.', 'notice.auto-off': 'Automatic prompt prediction is off.',
         'error.predict-failed': 'Prompt prediction failed. Try again or check the settings.',
+        'error.fragment-invalid': 'The selected guidance or style is unavailable. Pick another one in the settings.',
       });
       ctx.effect(() => installStyles(), 'prompt-assist: styles');
       ctx.effect(() => () => { bridge = undefined; configForm = undefined; shortcuts = undefined; notifyBridge(); });

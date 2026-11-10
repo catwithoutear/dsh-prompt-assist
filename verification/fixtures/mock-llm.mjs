@@ -27,10 +27,15 @@ function contentText(content) {
   return '';
 }
 
+function systemText(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  return messages.filter(message => message.role === 'system')
+    .map(message => contentText(message.content)).join('\n');
+}
+
 function classify(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const system = messages.filter(message => message.role === 'system')
-    .map(message => contentText(message.content)).join('\n');
+  const system = systemText(body);
   if (system.includes('You write the next USER message')) return 'predict';
   if (system.includes('text-completion engine')) return 'continuation';
   if (system.includes('One-shot application contract')) {
@@ -90,6 +95,9 @@ const server = createServer((req, res) => {
     const text = REPLY[kind] ?? REPLY.chat;
     stats.requests += 1;
     stats.byKind[kind] = (stats.byKind[kind] ?? 0) + 1;
+    // The Playwright spec asserts which guidance block reached the model, so the
+    // last prediction request exposes its whole system text through /__stats.
+    if (kind === 'predict') stats.lastPredictSystem = systemText(body);
     appendFileSync(LOG, `${JSON.stringify({
       at: new Date().toISOString(),
       kind,
@@ -97,7 +105,7 @@ const server = createServer((req, res) => {
       stream: body.stream ?? null,
       messageCount: (body.messages ?? []).length,
       system: (body.messages ?? []).filter(message => message.role === 'system')
-        .map(message => contentText(message.content).slice(0, 80)),
+        .map(message => contentText(message.content).slice(0, 2000)),
     })}\n`);
     if (body.stream) writeSse(res, text, body.model ?? 'mock-1');
     else writeJson(res, {
