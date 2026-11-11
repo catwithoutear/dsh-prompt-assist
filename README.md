@@ -8,6 +8,7 @@ A DSH plugin that suggests the next user prompt after a completed answer in the 
 
 - **Next-prompt preview.** After a completed answer, the empty composer shows one short next message drafted from the user's perspective, using the session model or a configured auxiliary model.
 - **Selectable guidance and style.** Four built-in guidance entries (natural continuation, challenge, alternative path, next action) and two styles (concise, precise). With no configuration the behaviour matches the previous release. Both can be copied into your own entries, up to 20 custom entries.
+- **Per-session strategy.** Two selectors in the session header show the guidance and style in effect for that session; pick values for this session only, or choose "Global" to inherit again. The choice is stored with the session, survives a restart, and a stale choice falls back to the global value with a `!` marker.
 - **Configurable auxiliary model.** Choose any provider/model already configured in DSH under **Settings → Prompt assist**. Leave it empty to follow the session model. The plugin stores no extra API keys and never silently falls back.
 - **Shortcut trigger and automatic mode.** `Trigger prompt prediction` asks for the next prompt when the draft is empty and for a continuation when it is not. `Toggle automatic prompt prediction` switches the post-answer automatic suggestion on or off (on by default, persisted).
 - **Remappable shortcuts.** Both commands are editable under **Settings → General → Shortcuts** with the native recorder. If a default binding conflicts, the plugin still loads and tells you to assign one manually.
@@ -40,14 +41,15 @@ To update an existing install: rebuild with `npm run build`, reinstall or re-app
 ## Usage
 
 1. **Next prompt**: wait for an answer to finish. When the session is idle and no input is queued, a grey suggestion appears in the visible, empty composer with the hint `Tab to accept · Esc to dismiss`.
-2. **Pick guidance and style**: choose them under **Settings → Prompt assist → Next prompt**. Switching hides the previous suggestion immediately but does not call the model; the next completed answer (or a manual trigger) uses the new selection.
-3. **Manual trigger**: focus the composer and press the trigger shortcut. An empty draft requests the next prompt; a non-empty draft with a collapsed caret requests a continuation at the caret.
-4. **Continuation**: the result appears inside the composer card. Tab inserts it at the current caret; moving the caret or editing the draft requires a fresh trigger.
-5. **Optimize**: select the text to rewrite (or keep the caret collapsed to optimize the whole draft), then press **Optimize** in the tool row:
+2. **Pick guidance and style**: choose the global default under **Settings → Prompt assist → Next prompt**. Switching hides the previous suggestion immediately but does not call the model; the next completed answer (or a manual trigger) uses the new selection.
+3. **Per-session choice**: the two selectors in the session header affect only the current session; "Global · …" clears that session's override. Switching does not call the model either.
+4. **Manual trigger**: focus the composer and press the trigger shortcut. An empty draft requests the next prompt; a non-empty draft with a collapsed caret requests a continuation at the caret.
+5. **Continuation**: the result appears inside the composer card. Tab inserts it at the current caret; moving the caret or editing the draft requires a fresh trigger.
+6. **Optimize**: select the text to rewrite (or keep the caret collapsed to optimize the whole draft), then press **Optimize** in the tool row:
    - `MODE: replace`: press **Apply** to replace the selection (or the whole draft) or **Cancel**;
    - `MODE: questions`: only the blocking questions are shown; edit the draft and trigger again.
-6. **Automatic mode**: press the toggle shortcut or use the settings page. Automatic requests stop when it is off; manual triggers still work.
-7. **History**: press ↑ for an older prompt and ↓ for a newer one. Going past the newest entry restores the draft you started with. With text in the composer, history only shows entries starting with that prefix.
+7. **Automatic mode**: press the toggle shortcut or use the settings page. Automatic requests stop when it is off; manual triggers still work.
+8. **History**: press ↑ for an older prompt and ↓ for a newer one. Going past the newest entry restores the draft you started with. With text in the composer, history only shows entries starting with that prefix.
 
 While the session is running, while files or images are attached, or when the composer is not in its plain editing state, suggestions are hidden. Whole-draft optimization is unavailable while the draft contains reference chips or quoted passages; a selection that overlaps either is rejected with an explanation that stays on screen until the draft changes. Continuation is not affected by chips. History restores text only.
 
@@ -57,7 +59,7 @@ While the session is running, while files or images are attached, or when the co
 
 - **Automation**: one switch for generating the next-prompt suggestion after each completed answer (on by default).
 - **Auxiliary model**: a card with "Follow the session model" or a configured provider/model; after choosing a provider you can pick a specific model or keep the provider default. Changes apply immediately without reloading the plugin.
-- **Next prompt**: guidance and style selectors built from the built-in entries and the enabled custom entries; switching shows "Saved. Applies to the next suggestion.".
+- **Next prompt**: guidance and style selectors built from the built-in entries and the enabled custom entries; switching shows "Saved. Applies to the next suggestion.". These are the global defaults that sessions without an override inherit.
 - **Custom entries**: built-in entries are read-only and can be copied; custom entries edit name, description and generation instruction, and can be enabled, disabled or deleted. The instruction may reference `{{last_user_message}}`, `{{last_assistant_answer}}` and `{{recent_context}}`; those values are passed as quoted data, never as system instructions.
 - **Optimization strategy**: **Faithful expand** is the default; it improves wording and makes already-implied detail explicit. Choose **Clarify only** for minimal ambiguity fixes. Neither mode adds goals, acceptance criteria, or technical choices the draft did not express.
 - **Themes**: the settings page follows the DSH light/dark theme; the select fields keep their own stroke so they stay distinguishable from the card in either theme.
@@ -66,7 +68,8 @@ While the session is running, while files or images are attached, or when the co
 ## Behavior and guarantees
 
 - **Eligibility.** The next-prompt preview is requested only after a `completed` turn whose final assistant message has text, is not interrupted, and contains no tool calls; the session must be idle with no queued input. Continuation is manual-only. Optimization is button-driven and not tied to turn eligibility, but requires the plain composer state.
-- **Scope of guidance and style.** They affect the next-prompt prediction only; continuation, optimization and history are untouched. The default guidance plus the default style rebuild the 1.3.8 prompt byte for byte. Switching a selection drops the previous candidate without a model request; a saved entry that no longer resolves (deleted, disabled or invalid) stops that generation with a message instead of silently falling back. The candidate cache is keyed by the entry identity (source, id, revision), and editing an entry bumps its revision so an older result is never shown as the new text.
+- **Scope of guidance and style.** They affect the next-prompt prediction only; continuation, optimization and history are untouched. The default guidance plus the default style rebuild the 1.3.8 prompt byte for byte. Switching a selection drops the previous candidate without a model request; a broken global entry (deleted, disabled or invalid) stops that generation with a message instead of silently falling back. The candidate cache is keyed by the entry identity (source, id, revision), and editing an entry bumps its revision so an older result is never shown as the new text.
+- **Session scope.** Resolution order is session override → global selection → built-in seed, independently per axis. A session override that no longer resolves falls back to the global value for that axis and shows a `!` marker (generation continues); a broken global selection still stops generation. At most 100 overrides are kept, pruned by last use; deleting a session does not clean its record.
 - **Entry validation and limits.** Instruction ≤4,000 characters, name ≤60, description ≤200, at most 20 custom entries; placeholders accept whitelisted names only. The fixed contract (one sendable short message, no assistant voice, empty result allowed) cannot be overridden by an entry.
 - **Model choice.** By default the plugin uses the session's live `modelSelection.next` or `lastUsed`; it never falls back to the session request header, so a session that started without a model and picked one later works immediately. When there is no selection at all the plugin reports that the session has no model instead of blaming the auxiliary model. A configured auxiliary route is validated before every call; an unavailable route produces an actionable error instead of a silent fallback. Next-prompt and continuation use the lowest supported reasoning effort; optimization leaves the effort to the provider.
 - **Context and limits.** Next-prompt sends the last 8 user/assistant text messages (user ≤2,400 and assistant ≤3,200 characters). Continuation sends recent transcript plus the draft prefix/suffix (≤8,000 characters total) and caps output at 160 single-line characters. Optimization sends the selection (≤6,000 characters) and a small context window (≤800 characters on each side); replace output is capped at 6,000 characters and questions at 2,000. Over-limit, timeout, empty output, and malformed output all produce explicit errors.
@@ -80,7 +83,7 @@ While the session is running, while files or images are attached, or when the co
 ```sh
 npm ci
 npm run build       # regenerate lib/client.js from src/
-npm test            # node:test suites, currently 94 tests
+npm test            # node:test suites, currently 101 tests
 npm run check       # syntax-check src/index.js and lib/client.js
 npm pack --dry-run  # inspect the distribution file list
 npm run verify:docker  # Docker + Playwright checks for verified DSH versions
@@ -90,10 +93,10 @@ Edit only the modules under `src/`. `lib/client.js` is generated by `build.mjs` 
 
 ## Testing
 
-The suite contains 94 tests in five files:
+The suite contains 101 tests in five files:
 
 - `test/core.test.js` — session folding, eligibility, sanitization, route resolution, `MODE:` parsing, history walking, wire validation.
-- `test/next-prompt.test.js` — the three-part prompt assembly, 1.3.8 byte compatibility, guidance/style resolution, variables and the data-section budget, entry validation.
+- `test/next-prompt.test.js` — the three-part prompt assembly, 1.3.8 byte compatibility, guidance/style resolution, variables and the data-section budget, entry validation, per-session overrides and pruning.
 - `test/preview-state.test.js` — candidate caching, visibility transitions, automatic/manual triggers, cancellation, late results.
 - `test/draft-assist.test.js` — continuation/optimization preview state machine, single-flight, late-drop, errors, cancellation.
 - `test/host.test.js` — the Host service against a real Cordis context with stubbed agents, projections, and LLM stream, including fragment resolution, cache keys and mid-stream configuration changes.

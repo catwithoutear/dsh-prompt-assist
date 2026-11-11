@@ -418,8 +418,8 @@ async function llmStats() {
 
 test('switches the next-prompt guidance and style from settings', async () => {
   await openSettings();
-  const guidance = page.getByLabel('Guidance');
-  const expression = page.getByLabel('Expression style');
+  const guidance = page.locator('.dsh-pa-settings').getByLabel('Guidance');
+  const expression = page.locator('.dsh-pa-settings').getByLabel('Expression style');
   await expect(guidance).toHaveValue('natural-followup');
   await expect(expression).toHaveValue('concise');
   await screenshot('10-settings-next-prompt.png');
@@ -443,7 +443,7 @@ test('switches the next-prompt guidance and style from settings', async () => {
   // Switching the style hides the candidate without asking the model anything.
   await openSettings();
   const settled = (await llmStats()).byKind?.predict ?? 0;
-  await page.getByLabel('Expression style').selectOption('precise');
+  await page.locator('.dsh-pa-settings').getByLabel('Expression style').selectOption('precise');
   await page.waitForTimeout(1500);
   expect((await llmStats()).byKind?.predict ?? 0).toBe(settled);
 
@@ -473,7 +473,7 @@ test('creates, edits, disables and deletes a custom entry', async () => {
   const row = page.locator('.dsh-pa-entry', { hasText: name });
   await expect(row).toBeVisible();
 
-  await page.getByLabel('Guidance').selectOption({ label: name });
+  await page.locator('.dsh-pa-settings').getByLabel('Guidance').selectOption({ label: name });
   await expect(page.getByText('Saved. Applies to the next suggestion.')).toBeVisible();
   const composer = await freshComposer();
   await setComposerText(composer, CHAT_PROMPT);
@@ -502,7 +502,7 @@ test('creates, edits, disables and deletes a custom entry', async () => {
   await page.locator('.dsh-pa-editor').getByLabel('Name').fill('Challenge copy');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.dsh-pa-entry', { hasText: 'Challenge copy' })).toBeVisible();
-  await expect(page.getByLabel('Guidance').locator('option', { hasText: 'Challenge copy' })).toHaveCount(1);
+  await expect(page.locator('.dsh-pa-settings').getByLabel('Guidance').locator('option', { hasText: 'Challenge copy' })).toHaveCount(1);
   await expect(page.locator('.dsh-pa-entry', { hasText: 'Challenge' }).first()
     .getByRole('button', { name: 'Duplicate' })).toBeVisible();
   await screenshot('12-custom-entry.png');
@@ -514,10 +514,46 @@ test('creates, edits, disables and deletes a custom entry', async () => {
   await expect(page.getByText('The selected guidance or style is unavailable. Pick another one.')).toBeVisible();
   await page.locator('.dsh-pa-entry', { hasText: name }).getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByText('This entry is in use; pick another one in the selector below before deleting it.')).toBeVisible();
-  await page.getByLabel('Guidance').selectOption('natural-followup');
+  await page.locator('.dsh-pa-settings').getByLabel('Guidance').selectOption('natural-followup');
   await expect(page.getByText('Saved. Applies to the next suggestion.')).toBeVisible();
   await page.locator('.dsh-pa-entry', { hasText: name }).getByRole('button', { name: 'Delete' }).click();
   await expect(page.locator('.dsh-pa-entry', { hasText: name })).toHaveCount(0);
+});
+
+test('selects the next-prompt strategy for one session', async () => {
+  const composer = await freshComposer();
+  const guidance = page.getByLabel('Guidance');
+  const style = page.getByLabel('Style');
+  await expect(guidance).toHaveValue('');
+  await expect(guidance).toContainText('Global');
+  await guidance.selectOption('challenge');
+  await style.selectOption('precise');
+  await expect(guidance).toHaveValue('challenge');
+  await screenshot('13-session-strategy.png');
+
+  await setComposerText(composer, CHAT_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
+  await expect.poll(async () => (await llmStats()).lastPredictSystem ?? '', { timeout: 90_000 })
+    .toContain('Target: the one claim');
+  const chosen = (await llmStats()).lastPredictSystem ?? '';
+  expect(chosen).toContain('Expression: name the boundary');
+
+  // The per-session choice survives a reload.
+  await freshComposer();
+  await expect(page.getByLabel('Guidance')).toHaveValue('challenge');
+  await expect(page.getByLabel('Style')).toHaveValue('precise');
+
+  // "Global" clears the override and the next suggestion returns to the default prompt.
+  await page.getByLabel('Guidance').selectOption('');
+  await page.getByLabel('Style').selectOption('');
+  await expect(page.getByLabel('Guidance')).toHaveValue('');
+  const restored = await freshComposer();
+  await setComposerText(restored, CHAT_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
+  await expect.poll(async () => (await llmStats()).lastPredictSystem ?? '', { timeout: 90_000 })
+    .toContain('If the assistant asks a question');
 });
 
 /** Optimization requests the deterministic stub has answered so far. */
