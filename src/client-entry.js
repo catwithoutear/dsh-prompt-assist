@@ -26,6 +26,21 @@ function makeClient(React) {
   const EMPTY_CATALOG = [];
   const EMPTY_CONFIG = { status: 'unavailable', value: undefined };
   const EMPTY_MODELS = { status: 'loading', providers: [] };
+  /** Options for one axis: the built-in seeds followed by the enabled custom entries. */
+  const optionRowsFor = (value, kind, translate) => {
+    const rows = (kind === 'style' ? STYLES : DIRECTIONS)
+      .map(item => ({ id: item.id, label: translate(`seed.${item.id}`) }));
+    for (const item of Array.isArray(value?.fragments) ? value.fragments : []) {
+      if (!item || item.kind !== kind || item.enabled === false
+        || typeof item.id !== 'string' || !item.id) continue;
+      rows.push({ id: item.id, label: typeof item.name === 'string' && item.name ? item.name : item.id });
+    }
+    return rows;
+  };
+  const fragmentLabel = (value, kind, id, translate) => {
+    if (typeof id !== 'string' || !id) return '';
+    return optionRowsFor(value, kind, translate).find(row => row.id === id)?.label ?? id;
+  };
   const PROBLEM_KEYS = {
     'empty-name': 'fragment.error.emptyName', 'name-limit': 'fragment.error.nameLimit',
     'description-limit': 'fragment.error.descriptionLimit',
@@ -382,6 +397,19 @@ function makeClient(React) {
 .dsh-pa-var:hover{color:var(--dsw-alias-brand-primary,#4d6bfe)}
 .dsh-pa-discard{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
   border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2))}
+.dsh-pa-session{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:340px}
+.dsh-pa-session-wrap{position:relative;display:inline-flex;align-items:center;min-width:0}
+.dsh-pa-session-select{box-sizing:border-box;appearance:none;height:26px;max-width:150px;padding:0 22px 0 9px;
+  border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.25));border-radius:999px;background:transparent;
+  color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:18px;cursor:pointer}
+.dsh-pa-session-select:hover{color:var(--dsw-alias-label-primary);
+  border-color:var(--dsw-alias-border-l2,rgba(127,127,127,.5))}
+.dsh-pa-session-select:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.dsh-pa-session-wrap::after{content:"";position:absolute;right:9px;top:50%;width:6px;height:6px;pointer-events:none;
+  border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;opacity:.8;
+  transform:translateY(-70%) rotate(45deg)}
+.dsh-pa-session-warn{flex:none;font-weight:600;font-size:12px;line-height:18px;
+  color:var(--dsw-alias-state-warning-primary,#c98a1b)}
 `;
   const STYLE_ID = 'dsh-prompt-assist-styles';
   /** Mount the plugin stylesheet once at apply time; settings render without a composer overlay. */
@@ -427,7 +455,7 @@ function makeClient(React) {
     );
     const configValue = config?.value ?? {};
     const auto = configValue.autoPredict !== false;
-    const fragmentSelection = resolveSelection(configValue);
+    const fragmentSelection = resolveSelection(configValue, sessionId);
     const fragmentInvalid = !!fragmentSelection.error;
     // Identity only covers the selected guidance and style; the preview key stays
     // untouched so a settings change never starts a model request by itself.
@@ -703,6 +731,74 @@ function makeClient(React) {
     }, t('button.optimize'));
   }
 
+  /**
+   * Session header control: two compact native selects that write only this
+   * session's override. Native popups stay above the chat body, which a
+   * header-local dropdown cannot do without a portal.
+   */
+  function SessionStrategyButton(props) {
+    const { sessionId } = props;
+    const translate = props.t ?? sessionT;
+    const config = React.useSyncExternalStore(
+      configForm ? configForm.subscribe : noopSubscribe,
+      configForm ? configForm.getSnapshot : () => EMPTY_CONFIG,
+    );
+    const [failed, setFailed] = React.useState(false);
+    const queue = React.useRef(Promise.resolve());
+    // Only write once the settings form is hydrated; otherwise a write would
+    // replace the stored list with just this session's entry.
+    if (!configForm || !config || config.status !== 'ready' || config.value === undefined || !sessionId) return null;
+    const value = config.value ?? {};
+    const resolved = resolveSelection(value, sessionId);
+    // A broken global selection is explained by the composer; the header stays quiet.
+    if (resolved.error) return null;
+    const own = sessionOverride(value, sessionId);
+    const fallback = resolved.sessionFallback ?? {};
+    const globalDirection = typeof value.directionId === 'string' && value.directionId
+      ? value.directionId : DEFAULT_DIRECTION_ID;
+    const globalStyle = typeof value.styleId === 'string' && value.styleId
+      ? value.styleId : DEFAULT_STYLE_ID;
+    // Serialise writes: two quick selections must merge against the value the
+    // previous write committed, not against this render's stale snapshot.
+    const write = change => {
+      queue.current = queue.current.then(async () => {
+        const snapshot = configForm.getSnapshot();
+        const current = (snapshot?.value ?? {}).sessionOverrides;
+        const next = withSessionOverride(current, sessionId, change);
+        let ok = false;
+        try { ok = await configForm.set('sessionOverrides', next); } catch { ok = false; }
+        setFailed(!ok);
+      }, () => setFailed(true));
+    };
+    const select = (kind, storedId, globalId, label) => {
+      const rows = optionRowsFor(value, kind, translate);
+      // A stored id that no longer resolves is shown as a disabled option so the
+      // control matches what is persisted and "Global" is a real change again.
+      const stale = storedId !== '' && !rows.some(row => row.id === storedId);
+      return h('span', { className: 'dsh-pa-session-wrap' },
+        h('select', {
+          className: 'dsh-pa-session-select',
+          value: storedId,
+          'aria-label': label,
+          title: label,
+          onChange: event => write(kind === 'style'
+            ? { styleId: event.target.value } : { directionId: event.target.value }),
+        },
+          h('option', { value: '' },
+            `${translate('sessionStrategy.inheritShort')} · ${fragmentLabel(value, kind, globalId, translate)}`),
+          stale && h('option', { value: storedId, disabled: true }, translate('sessionStrategy.stale')),
+          rows.map(row => h('option', { key: row.id, value: row.id }, row.label))));
+    };
+    return h('div', { className: 'dsh-pa-session' },
+      select('direction', own?.directionId ?? '', globalDirection, translate('sessionStrategy.direction')),
+      select('style', own?.styleId ?? '', globalStyle, translate('sessionStrategy.style')),
+      (fallback.direction || fallback.style || failed) && h('span', {
+        className: 'dsh-pa-session-warn',
+        role: 'status',
+        title: failed ? translate('sessionStrategy.saveFailed') : translate('sessionStrategy.fallback'),
+      }, '!'));
+  }
+
   function SettingsPage() {
     const translate = settingsT;
     const config = useConfig();
@@ -761,15 +857,7 @@ function makeClient(React) {
     const directionId = typeof value.directionId === 'string' && value.directionId
       ? value.directionId : DEFAULT_DIRECTION_ID;
     const styleId = typeof value.styleId === 'string' && value.styleId ? value.styleId : DEFAULT_STYLE_ID;
-    const optionsFor = (seeds, kind) => {
-      const rows = seeds.map(item => ({ id: item.id, label: translate(`seed.${item.id}`) }));
-      for (const item of Array.isArray(value.fragments) ? value.fragments : []) {
-        if (!item || item.kind !== kind || item.enabled === false
-          || typeof item.id !== 'string' || !item.id) continue;
-        rows.push({ id: item.id, label: typeof item.name === 'string' && item.name ? item.name : item.id });
-      }
-      return rows;
-    };
+    const optionsFor = kind => optionRowsFor(value, kind, translate);
     const optionRows = (rows, selected) => {
       const list = rows.some(row => row.id === selected)
         ? rows : [{ id: selected, label: translate('settings.fragmentInvalidOption') }, ...rows];
@@ -1001,7 +1089,7 @@ function makeClient(React) {
               h('select', { className: 'dsh-pa-select', value: directionId,
                 'aria-label': translate('settings.direction'),
                 onChange: event => setSelection('directionId', event.target.value) },
-                optionRows(optionsFor(DIRECTIONS, 'direction'), directionId)))),
+                optionRows(optionsFor('direction'), directionId)))),
           h('span', { className: 'dsh-pa-desc' }, translate('settings.directionHint')),
           h('div', { className: 'dsh-pa-field' },
             h('span', { className: 'dsh-pa-field-label' }, translate('settings.style')),
@@ -1009,7 +1097,7 @@ function makeClient(React) {
               h('select', { className: 'dsh-pa-select', value: styleId,
                 'aria-label': translate('settings.style'),
                 onChange: event => setSelection('styleId', event.target.value) },
-                optionRows(optionsFor(STYLES, 'style'), styleId)))),
+                optionRows(optionsFor('style'), styleId)))),
           h('span', { className: 'dsh-pa-desc' }, translate('settings.styleHint')),
           savedSelection && h('span', { className: 'dsh-pa-desc' }, translate('settings.nextSaved'))),
         fragmentCard),
@@ -1028,6 +1116,7 @@ function makeClient(React) {
   }
 
   let settingsT = key => key;
+  let sessionT = key => key;
 
   function registerCommand(ctx, definition, logger) {
     try {
@@ -1046,6 +1135,7 @@ function makeClient(React) {
       const t = ctx.locale.bind(NS);
       const logger = ctx.logger ?? console;
       settingsT = key => t(key);
+      sessionT = key => t(key);
       const form = ctx.configForms.get(SETTINGS_NS);
       configForm = {
         getSnapshot: () => form.getSnapshot(),
@@ -1071,6 +1161,10 @@ function makeClient(React) {
         'settings.group.automation': '自动预测', 'settings.group.model': '辅助模型', 'settings.group.shortcuts': '快捷键',
         'settings.modelRow': '模型', 'settings.modelDefault': '使用提供商默认模型',
         'settings.modelHint': '默认跟随会话模型；选择其他模型后，下一句、续写与优化都用它生成。',
+        'sessionStrategy.direction': '方向', 'sessionStrategy.style': '风格',
+        'sessionStrategy.inheritShort': '跟随全局', 'sessionStrategy.stale': '（已失效）',
+        'sessionStrategy.fallback': '本会话原来的选择已失效，正在使用全局默认。',
+        'sessionStrategy.saveFailed': '保存失败，请重试。',
         'settings.group.next': '下一句预测',
         'settings.direction': '引导方向', 'settings.style': '表达风格',
         'settings.directionHint': '决定建议问什么；切换后对下一次建议生效。',
@@ -1138,6 +1232,10 @@ function makeClient(React) {
         'settings.group.automation': 'Automation', 'settings.group.model': 'Auxiliary model', 'settings.group.shortcuts': 'Shortcuts',
         'settings.modelRow': 'Model', 'settings.modelDefault': 'Use the provider default',
         'settings.modelHint': 'Follows the session model by default; when another model is selected it also generates previews, continuations and optimizations.',
+        'sessionStrategy.direction': 'Guidance', 'sessionStrategy.style': 'Style',
+        'sessionStrategy.inheritShort': 'Global', 'sessionStrategy.stale': '(unavailable)',
+        'sessionStrategy.fallback': 'The previous choice for this session is unavailable; the global default is in effect.',
+        'sessionStrategy.saveFailed': 'Saving failed. Try again.',
         'settings.group.next': 'Next prompt',
         'settings.direction': 'Guidance', 'settings.style': 'Expression style',
         'settings.directionHint': 'What the suggestion asks about; applies to the next suggestion.',
@@ -1198,6 +1296,9 @@ function makeClient(React) {
       ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
         name: 'conversation.input.overlay', id: 'local-prompt-assist', order: 20, locale: NS,
       }, PromptComposer));
+      ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
+        name: 'conversation.session.header.actions', id: 'local-prompt-assist-session', order: 20, locale: NS,
+      }, SessionStrategyButton));
       ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
         name: 'conversation.input.right', id: 'local-prompt-assist-optimize', order: 10, locale: NS,
       }, OptimizeButton));

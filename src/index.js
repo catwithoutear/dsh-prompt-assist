@@ -19,6 +19,12 @@ const Fragment = Schema.object({
   enabled: Schema.boolean().default(true),
   revision: Schema.number().default(1),
 });
+const SessionOverride = Schema.object({
+  sessionId: Schema.string().required(),
+  directionId: Schema.string(),
+  styleId: Schema.string(),
+  at: Schema.number().default(0),
+});
 export const Config = Schema.object({
   provider: Schema.string().default('').volatile(),
   model: Schema.string().default('').volatile(),
@@ -27,6 +33,7 @@ export const Config = Schema.object({
   directionId: Schema.string().default(DEFAULT_DIRECTION_ID).volatile(),
   styleId: Schema.string().default(DEFAULT_STYLE_ID).volatile(),
   fragments: Schema.array(Fragment).default([]).volatile(),
+  sessionOverrides: Schema.array(SessionOverride).default([]).volatile(),
 });
 const PreviewView = z.object({ history: z.array(z.string()), endSeq: z.number().int(),
   eligible: z.boolean(), openTurn: z.number().nullable() });
@@ -159,7 +166,7 @@ export class PromptAssist extends TypertRemoteService {
         && !agent.inbox.nextTurn.length && !agent.inbox.nextStep.length;
     };
     if (!current()) return { status: 'stale', text: '' };
-    const selection = resolveSelection(this.config);
+    const selection = resolveSelection(this.config, request.sessionId);
     if (selection.error) return { status: 'unavailable', text: '' };
     const identity = fragmentIdentity(selection.direction, selection.style);
     const route = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
@@ -204,7 +211,7 @@ export class PromptAssist extends TypertRemoteService {
           }
           const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
             this.defaultSelection());
-          const nextSelection = resolveSelection(this.config);
+          const nextSelection = resolveSelection(this.config, request.sessionId);
           if (!current() || owned.controller.signal.aborted
             || nextRoute.provider !== route.provider || nextRoute.model !== route.model
             || nextSelection.error

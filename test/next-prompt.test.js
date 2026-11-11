@@ -4,6 +4,7 @@ import {
   SYSTEM, DIRECTIONS, STYLES, SEED_VERSION, DEFAULT_DIRECTION_ID, DEFAULT_STYLE_ID, LIMITS,
   usedVariables, renderVariables, fragmentProblem, fragmentsProblem, resolveFragment, resolveSelection,
   fragmentIdentity, assembleSystem, assembleMessage, assemblePrompt,
+  SESSION_OVERRIDE_LIMIT, sessionOverride, pruneSessionOverrides, withSessionOverride,
 } from '../src/core.js';
 
 import { PUBLISHED_1308 as FROZEN_1308 } from './fixtures/published-1308.mjs';
@@ -145,6 +146,87 @@ test('selection errors propagate and malformed configuration is not silently def
   assert.equal(resolveSelection({ fragments: { not: 'an array' } }).error, 'invalid-fragments');
   assert.equal(resolveSelection({ directionId: '' }).error, 'fragment-missing',
     'an explicit empty id is a broken selection, not a request for the default');
+});
+
+test('a session override wins, inherits per axis and falls back when it breaks', () => {
+  const global = { directionId: 'natural-followup', styleId: 'concise' };
+  const full = resolveSelection({ ...global, sessionOverrides: [
+    { sessionId: 's1', directionId: 'challenge', styleId: 'precise' },
+  ] }, 's1');
+  assert.equal(full.direction.id, 'challenge');
+  assert.equal(full.style.id, 'precise');
+  assert.equal(full.sessionFallback, undefined);
+
+  const partial = resolveSelection({ ...global, sessionOverrides: [
+    { sessionId: 's1', styleId: 'precise' },
+  ] }, 's1');
+  assert.equal(partial.direction.id, 'natural-followup');
+  assert.equal(partial.style.id, 'precise');
+
+  const other = resolveSelection({ ...global, sessionOverrides: [
+    { sessionId: 's1', styleId: 'precise' },
+  ] }, 's2');
+  assert.equal(other.style.id, 'concise', 'another session keeps the global selection');
+
+  const broken = resolveSelection({ ...global, sessionOverrides: [
+    { sessionId: 's1', directionId: 'deleted', styleId: 'gone' },
+  ] }, 's1');
+  assert.equal(broken.error, undefined);
+  assert.equal(broken.direction.id, 'natural-followup');
+  assert.equal(broken.style.id, 'concise');
+  assert.deepEqual(broken.sessionFallback, { direction: 'fragment-missing', style: 'fragment-missing' });
+
+  const brokenGlobal = resolveSelection({ directionId: 'deleted', sessionOverrides: [] }, 's1');
+  assert.equal(brokenGlobal.error, 'fragment-missing');
+});
+
+test('session overrides are written per axis, cleared and capped', () => {
+  const first = withSessionOverride([], 's1', { directionId: 'challenge' }, 10);
+  assert.deepEqual(first, [{ sessionId: 's1', directionId: 'challenge', at: 10 }]);
+  const withStyle = withSessionOverride(first, 's1', { styleId: 'precise' }, 20);
+  assert.deepEqual(withStyle, [{ sessionId: 's1', directionId: 'challenge', styleId: 'precise', at: 20 }]);
+  const clearedAxis = withSessionOverride(withStyle, 's1', { styleId: '' }, 30);
+  assert.deepEqual(clearedAxis, [{ sessionId: 's1', directionId: 'challenge', at: 30 }]);
+  assert.deepEqual(withSessionOverride(clearedAxis, 's1', { directionId: '' }, 40), []);
+  assert.deepEqual(withSessionOverride([], '', { directionId: 'x' }, 1), [],
+    'an empty session id never becomes an entry');
+});
+
+test('duplicate rows and non-string ids are normalised', () => {
+  const duplicated = [
+    { sessionId: 's1', directionId: 'action', at: 1 },
+    { sessionId: 's1', directionId: 'challenge', at: 2 },
+  ];
+  assert.equal(pruneSessionOverrides(duplicated).length, 1, 'one row per session survives');
+  const merged = withSessionOverride(duplicated, 's1', { styleId: 'precise' }, 3);
+  assert.deepEqual(merged, [{ sessionId: 's1', directionId: 'challenge', styleId: 'precise', at: 3 }],
+    'the newest duplicate wins and the merge keeps it');
+  assert.deepEqual(withSessionOverride([], 's1', { directionId: 42 }, 1), [],
+    'a non-string id clears the axis instead of being stored');
+});
+
+test('an equal timestamp cannot prune the entry that was just written', () => {
+  const full = [];
+  for (let index = 0; index < SESSION_OVERRIDE_LIMIT; index += 1) {
+    full.push({ sessionId: `s${index}`, directionId: 'challenge', at: 5 });
+  }
+  const next = withSessionOverride(full, 'fresh', { directionId: 'action' }, 5);
+  assert.equal(next.length, SESSION_OVERRIDE_LIMIT);
+  assert.equal(next[0].sessionId, 'fresh', 'the fresh entry sorts first on a tie');
+  assert.equal(next.find(row => row.sessionId === `s${SESSION_OVERRIDE_LIMIT - 1}`), undefined,
+    'the oldest row with the same timestamp is dropped instead');
+});
+
+test('oversized override lists keep the newest sessions', () => {
+  const many = [];
+  for (let index = 0; index < SESSION_OVERRIDE_LIMIT + 5; index += 1) {
+    many.push({ sessionId: `s${index}`, directionId: 'challenge', at: index });
+  }
+  const pruned = pruneSessionOverrides(many);
+  assert.equal(pruned.length, SESSION_OVERRIDE_LIMIT);
+  assert.equal(pruned.find(row => row.sessionId === `s${SESSION_OVERRIDE_LIMIT + 4}`)?.at, SESSION_OVERRIDE_LIMIT + 4);
+  assert.equal(pruned.find(row => row.sessionId === 's0'), undefined, 'the oldest session is dropped');
+  assert.equal(sessionOverride({ sessionOverrides: pruned }, `s${SESSION_OVERRIDE_LIMIT}`)?.directionId, 'challenge');
 });
 
 test('selection identity covers both fragments and their revisions without delimiter collisions', () => {

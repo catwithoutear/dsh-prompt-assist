@@ -490,6 +490,54 @@ test('an invalid selection does not abort an in-flight generation', async () => 
   } finally { proceed(); await f.ctx.fiber.dispose(); }
 });
 
+test('a session override drives the prompt and leaves the global selection alone', async () => {
+  const f = setup(answer, { sessionOverrides: [{ sessionId: 'session-test', directionId: 'challenge', at: 1 }] });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.match(f.calls[0].system, /Target: the one claim/);
+    assert.doesNotMatch(f.calls[0].system, /If the assistant asks a question/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('a broken session override falls back to the global selection instead of failing', async () => {
+  const f = setup(answer, { sessionOverrides: [
+    { sessionId: 'session-test', directionId: 'deleted-entry', at: 2 },
+  ] });
+  try {
+    const result = await f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    assert.equal(result.status, 'ready');
+    assert.equal(f.calls[0].system, PUBLISHED_1308);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('changing a session override invalidates the cached candidate', async () => {
+  const f = setup(answer);
+  try {
+    const request = { sessionId: f.agent.id, endSeq: 9 };
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 1);
+    f.service.config.sessionOverrides = [{ sessionId: 'session-test', styleId: 'precise', at: 3 }];
+    assert.equal((await f.service.predict(request)).status, 'ready');
+    assert.equal(f.calls.length, 2, 'a session override must not reuse the global candidate');
+    assert.match(f.calls[1].system, /Expression: name the boundary/);
+    assert.match(f.calls[1].system, /If the assistant asks a question/);
+  } finally { await f.ctx.fiber.dispose(); }
+});
+
+test('changing a session override mid-stream discards the late prediction', async () => {
+  let proceed;
+  const gate = new Promise(resolve => { proceed = resolve; });
+  const f = setup(async function* () { await gate; yield* answer(); });
+  try {
+    const pending = f.service.predict({ sessionId: f.agent.id, endSeq: 9 });
+    await Promise.resolve(); await Promise.resolve();
+    f.service.config.sessionOverrides = [{ sessionId: 'session-test', directionId: 'challenge', at: 4 }];
+    proceed();
+    assert.equal((await pending).status, 'stale');
+  } finally { proceed(); await f.ctx.fiber.dispose(); }
+});
+
 test('the resolved Config defaults drive the published prompt', async () => {
   const resolved = Config({});
   assert.equal(readVolatile(resolved.directionId), DEFAULT_DIRECTION_ID);

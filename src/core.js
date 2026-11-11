@@ -44,6 +44,7 @@ export const STYLES = [
 ];
 
 export const LIMITS = { instruction: 4000, name: 60, description: 200, fragments: 20, attached: 8000 };
+export const SESSION_OVERRIDE_LIMIT = 100;
 const VARIABLE_POINTERS = {
   last_user_message: '[data:last_user_message]',
   last_assistant_answer: '[data:last_assistant_answer]',
@@ -137,24 +138,88 @@ export function resolveFragment(fragments, kind, id) {
   return { fragment: { ...seed, kind, revision: SEED_VERSION, enabled: true, source: 'seed' } };
 }
 
-/** Resolve the selected direction and style; any problem stops generation. */
-export function resolveSelection(config) {
+/**
+ * One session's explicit choice. `undefined` means the session inherits the global
+ * default; a malformed map is ignored rather than treated as a selection.
+ */
+export function sessionOverride(config, sessionId) {
+  if (typeof sessionId !== 'string' || sessionId === '') return undefined;
+  const rows = pruneSessionOverrides(readVolatile(config?.sessionOverrides));
+  const own = rows.find(row => row.sessionId === sessionId);
+  return own && typeof own === 'object' ? own : undefined;
+}
+
+/**
+ * Keep the newest overrides. The list is capped instead of keyed by session id:
+ * the settings document accepts arrays of plain objects, which the Host already
+ * validates for `fragments`, while a dynamic-key dict is rejected on write.
+ */
+export function pruneSessionOverrides(overrides, limit = SESSION_OVERRIDE_LIMIT) {
+  if (!Array.isArray(overrides)) return [];
+  const newest = new Map();
+  for (const row of overrides) {
+    if (!row || typeof row !== 'object' || typeof row.sessionId !== 'string' || row.sessionId === '') continue;
+    const previous = newest.get(row.sessionId);
+    if (!previous || (Number(row.at) || 0) >= (Number(previous.at) || 0)) newest.set(row.sessionId, row);
+  }
+  return [...newest.values()]
+    .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0))
+    .slice(0, Math.max(0, limit));
+}
+
+/**
+ * Set or clear one session's ids and return the whole list ready to be written.
+ * An empty string clears that axis; clearing both removes the session entry.
+ */
+export function withSessionOverride(overrides, sessionId, change = {}, now = Date.now()) {
+  const list = Array.isArray(overrides) ? overrides : [];
+  if (typeof sessionId !== 'string' || sessionId === '') return pruneSessionOverrides(list);
+  const current = pruneSessionOverrides(list).find(row => row.sessionId === sessionId) ?? {};
+  const entry = { ...current, sessionId };
+  for (const axis of ['directionId', 'styleId']) {
+    if (!Object.prototype.hasOwnProperty.call(change, axis)) continue;
+    const value = change[axis];
+    if (typeof value === 'string' && value !== '') entry[axis] = value; else delete entry[axis];
+  }
+  const rest = list.filter(row => !(row && row.sessionId === sessionId));
+  if (entry.directionId === undefined && entry.styleId === undefined) return pruneSessionOverrides(rest);
+  // Keep the fresh entry first so an equal `at` (clock skew) cannot prune it away.
+  return pruneSessionOverrides([{ ...entry, at: now }, ...rest]);
+}
+
+const configuredId = (value, fallback) =>
+  (value === undefined || value === null ? fallback : value);
+
+/**
+ * Resolve the selected direction and style per session: the session override wins,
+ * the global selection is the fallback, and a seed default covers an unset global.
+ * A broken override falls back to the global axis and is reported in
+ * `sessionFallback` so the client can explain it once; a broken global selection
+ * still stops generation.
+ */
+export function resolveSelection(config, sessionId) {
   const raw = readVolatile(config?.fragments);
   if (raw !== undefined && raw !== null && !Array.isArray(raw)) return { error: 'invalid-fragments' };
   const fragments = Array.isArray(raw) ? raw : [];
-  const configuredDirection = readVolatile(config?.directionId);
-  const configuredStyle = readVolatile(config?.styleId);
-  // Only an absent value means "use the seed default"; an explicit empty id is a
-  // broken selection and must stop generation instead of silently defaulting.
-  const directionId = configuredDirection === undefined || configuredDirection === null
-    ? DEFAULT_DIRECTION_ID : configuredDirection;
-  const styleId = configuredStyle === undefined || configuredStyle === null
-    ? DEFAULT_STYLE_ID : configuredStyle;
-  const direction = resolveFragment(fragments, 'direction', directionId);
-  const style = resolveFragment(fragments, 'style', styleId);
+  const own = sessionOverride(config, sessionId);
+  const fallback = {};
+  const pick = (kind, overrideId, globalId) => {
+    if (typeof overrideId === 'string' && overrideId !== '') {
+      const chosen = resolveFragment(fragments, kind, overrideId);
+      if (!chosen.error) return chosen;
+      fallback[kind] = chosen.error;
+    }
+    return resolveFragment(fragments, kind, globalId);
+  };
+  const directionId = configuredId(readVolatile(config?.directionId), DEFAULT_DIRECTION_ID);
+  const styleId = configuredId(readVolatile(config?.styleId), DEFAULT_STYLE_ID);
+  const direction = pick('direction', own?.directionId, directionId);
   if (direction.error) return { error: direction.error };
+  const style = pick('style', own?.styleId, styleId);
   if (style.error) return { error: style.error };
-  return { direction: direction.fragment, style: style.fragment };
+  const resolved = { direction: direction.fragment, style: style.fragment };
+  if (Object.keys(fallback).length > 0) resolved.sessionFallback = fallback;
+  return resolved;
 }
 
 /** Stable identity used by both Host cache keys and the client's change detection. */
