@@ -459,6 +459,67 @@ test('switches the next-prompt guidance and style from settings', async () => {
   expect(styledSystem).not.toContain('If the assistant asks a question');
 });
 
+test('creates, edits, disables and deletes a custom entry', async () => {
+  const name = 'Verification custom guidance';
+  const instruction = 'Ask one verification-specific follow-up.';
+  const edited = `${instruction} Ask for evidence.`;
+  await openSettings();
+
+  await page.getByRole('button', { name: 'New guidance' }).click();
+  const editor = page.locator('.dsh-pa-editor');
+  await editor.getByLabel('Name').fill(name);
+  await editor.getByLabel('Generation instruction').fill(instruction);
+  await page.getByRole('button', { name: 'Save' }).click();
+  const row = page.locator('.dsh-pa-entry', { hasText: name });
+  await expect(row).toBeVisible();
+
+  await page.getByLabel('Guidance').selectOption({ label: name });
+  await expect(page.getByText('Saved. Applies to the next suggestion.')).toBeVisible();
+  const composer = await freshComposer();
+  await setComposerText(composer, CHAT_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
+  await expect.poll(async () => (await llmStats()).lastPredictSystem ?? '', { timeout: 90_000 })
+    .toContain(instruction);
+
+  // Editing bumps the revision and the next suggestion uses the new text.
+  await openSettings();
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await page.locator('.dsh-pa-editor').getByLabel('Generation instruction').fill(edited);
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.dsh-pa-editor')).toHaveCount(0);
+  const editedComposer = await freshComposer();
+  await setComposerText(editedComposer, CHAT_PROMPT);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
+  await expect.poll(async () => (await llmStats()).lastPredictSystem ?? '', { timeout: 90_000 })
+    .toContain(edited);
+
+  // Copying a built-in leaves the original untouched and yields a selectable entry.
+  await openSettings();
+  await page.locator('.dsh-pa-entry', { hasText: 'Challenge' }).first()
+    .getByRole('button', { name: 'Duplicate' }).click();
+  await page.locator('.dsh-pa-editor').getByLabel('Name').fill('Challenge copy');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.dsh-pa-entry', { hasText: 'Challenge copy' })).toBeVisible();
+  await expect(page.getByLabel('Guidance').locator('option', { hasText: 'Challenge copy' })).toHaveCount(1);
+  await expect(page.locator('.dsh-pa-entry', { hasText: 'Challenge' }).first()
+    .getByRole('button', { name: 'Duplicate' })).toBeVisible();
+  await screenshot('12-custom-entry.png');
+
+  // Disabling the entry in use surfaces the invalid-selection warning, and the
+  // entry cannot be deleted until another one is selected.
+  await openSettings();
+  await row.getByRole('button', { name: 'Disable' }).click();
+  await expect(page.getByText('The selected guidance or style is unavailable. Pick another one.')).toBeVisible();
+  await page.locator('.dsh-pa-entry', { hasText: name }).getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByText('This entry is in use; pick another one in the selector below before deleting it.')).toBeVisible();
+  await page.getByLabel('Guidance').selectOption('natural-followup');
+  await expect(page.getByText('Saved. Applies to the next suggestion.')).toBeVisible();
+  await page.locator('.dsh-pa-entry', { hasText: name }).getByRole('button', { name: 'Delete' }).click();
+  await expect(page.locator('.dsh-pa-entry', { hasText: name })).toHaveCount(0);
+});
+
 /** Optimization requests the deterministic stub has answered so far. */
 async function optimizationRequests() {
   const response = await page.request.get(MOCK_STATS_URL);
