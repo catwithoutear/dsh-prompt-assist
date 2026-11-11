@@ -1,19 +1,32 @@
 import { z } from 'zod';
 import Schema from '@deepseek-ai/schemastery';
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
-import { PACKAGE, PROJECTION, SYSTEM, CONTINUE_SYSTEM, OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY,
-  optimizeSystem, continueUserMessage, readVolatile, initialState, fold, viewOf,
+import { PACKAGE, PROJECTION, CONTINUE_SYSTEM, OPTIMIZE_STRATEGIES, DEFAULT_OPTIMIZE_STRATEGY,
+  DEFAULT_DIRECTION_ID, DEFAULT_STYLE_ID, optimizeSystem, continueUserMessage, readVolatile,
+  initialState, fold, viewOf, resolveSelection, fragmentIdentity, assemblePrompt,
   sanitize, sanitizeContinuation, parseOptimize, lowestEffort, wireEndSeq,
   routeOf, isHuman } from './core.js';
 import { descriptor, continueDescriptor, optimizeDescriptor, modelsDescriptor,
   requestCodec, continueRequestCodec, optimizeRequestCodec, modelsRequestCodec } from './remote.js';
 
 export const inject = ['llm', 'agents', 'sessionProjections', 'typert', 'agentDefaultModel'];
+const Fragment = Schema.object({
+  id: Schema.string().required(),
+  kind: Schema.union(['direction', 'style']).default('direction'),
+  name: Schema.string().required(),
+  description: Schema.string().default(''),
+  instruction: Schema.string().required(),
+  enabled: Schema.boolean().default(true),
+  revision: Schema.number().default(1),
+});
 export const Config = Schema.object({
   provider: Schema.string().default('').volatile(),
   model: Schema.string().default('').volatile(),
   autoPredict: Schema.boolean().default(true).volatile(),
   optimizeStrategy: Schema.union(OPTIMIZE_STRATEGIES).default(DEFAULT_OPTIMIZE_STRATEGY).volatile(),
+  directionId: Schema.string().default(DEFAULT_DIRECTION_ID).volatile(),
+  styleId: Schema.string().default(DEFAULT_STYLE_ID).volatile(),
+  fragments: Schema.array(Fragment).default([]).volatile(),
 });
 const PreviewView = z.object({ history: z.array(z.string()), endSeq: z.number().int(),
   eligible: z.boolean(), openTurn: z.number().nullable() });
@@ -146,14 +159,20 @@ export class PromptAssist extends TypertRemoteService {
         && !agent.inbox.nextTurn.length && !agent.inbox.nextStep.length;
     };
     if (!current()) return { status: 'stale', text: '' };
+    const selection = resolveSelection(this.config);
+    if (selection.error) return { status: 'unavailable', text: '' };
+    const identity = fragmentIdentity(selection.direction, selection.style);
     const route = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
       this.defaultSelection());
     if (!route.provider || !route.model) return { status: 'unavailable', text: '' };
-    const key = JSON.stringify([request.endSeq, route.provider, route.model]);
+    const key = JSON.stringify([request.endSeq, route.provider, route.model, identity]);
     let item = runtime.cache.get(agent.id);
     // Successful candidates remain reusable. Cancellation is not a permanent
     // negative cache: clearing the draft can start a fresh request for this turn.
     if (item?.key !== key || item.controller.signal.aborted) {
+      const prompt = assemblePrompt({ recent: state.recent,
+        direction: selection.direction, style: selection.style });
+      if (prompt.error) return { status: 'unavailable', text: '' };
       item?.controller.abort();
       item = { key, controller: new AbortController(), consumers: 0, settled: false };
       runtime.cache.set(agent.id, item);
@@ -171,8 +190,8 @@ export class PromptAssist extends TypertRemoteService {
           for await (const chunk of ctx.llm.stream({
             provider: route.provider, model: route.model,
             ...(effort === undefined ? {} : { reasoningEffort: effort }),
-            maxTokens: 2048, system: SYSTEM, tools: [],
-            messages: [{ role: 'user', content: [{ type: 'text', text: JSON.stringify(state.recent) }] }],
+            maxTokens: 2048, system: prompt.system, tools: [],
+            messages: [{ role: 'user', content: [{ type: 'text', text: prompt.message }] }],
             signal: owned.controller.signal, sessionId: session.id,
           })) {
             if (owned.controller.signal.aborted || !current()) return { status: 'stale', text: '' };
@@ -185,8 +204,11 @@ export class PromptAssist extends TypertRemoteService {
           }
           const nextRoute = routeOf(this.config, ctx.sessionProjections.stateOf(session, 'modelSelection'), session,
             this.defaultSelection());
+          const nextSelection = resolveSelection(this.config);
           if (!current() || owned.controller.signal.aborted
-            || nextRoute.provider !== route.provider || nextRoute.model !== route.model) return { status: 'stale', text: '' };
+            || nextRoute.provider !== route.provider || nextRoute.model !== route.model
+            || nextSelection.error
+            || fragmentIdentity(nextSelection.direction, nextSelection.style) !== identity) return { status: 'stale', text: '' };
           const text = finished ? sanitize(raw) : '';
           return { status: text ? 'ready' : 'unavailable', text };
         } catch (error) {

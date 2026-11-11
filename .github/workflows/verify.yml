@@ -63,10 +63,14 @@ jobs:
             }
             const nodeImages = doc.nodeImages || {};
             const defaultNodeImage = doc.defaultNodeImage || "node:22-bookworm-slim";
+            // Host packages to pin back per version; the image build passes this to
+            // verification/pin-dsh-deps.mjs so a floating pre-release cannot break it.
+            const pins = doc.pins || {};
             const include = versions.map(version => ({
               dsh: version,
               nodeImage: nodeImages[version]
                 || (version.startsWith("0.2.2-alpha.") ? "node:24-bookworm-slim" : defaultNodeImage),
+              pins: pins[version] ? JSON.stringify(pins[version]) : "",
             }));
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include })}\n`);
           '
@@ -95,6 +99,7 @@ jobs:
           build-args: |
             DSH_VERSION=${{ matrix.dsh }}
             NODE_IMAGE=${{ matrix.nodeImage }}
+            DSH_PINS=${{ matrix.pins }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
