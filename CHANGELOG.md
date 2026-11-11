@@ -4,6 +4,23 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable next-prompt guidance and style.** The prediction prompt is assembled from a fixed head, one guidance block, one style block and a fixed tail. Four guidance entries (natural continuation, challenge, alternative path, next action) and two styles (concise, precise) ship as copyable starting points; with the default selection the prompt is byte-identical to 1.3.8.
+- **Custom guidance and style entries.** Guidance and style are the same kind of editable fragment: copy a built-in entry or create one, edit its name, description and generation instruction, reference `{{last_user_message}}`, `{{last_assistant_answer}}` or `{{recent_context}}`, then enable, disable or delete it. Up to 20 entries, instruction ≤4,000 characters.
+- **Settings section for the next prompt.** Two selectors plus an entry list and editor; switching a selection drops the stale candidate without a model request, an unusable selection stops generation with a message, and an entry that is in use cannot be deleted until another one is selected.
+
+### Changed
+
+- The Host candidate cache and the client preview context include the selected fragment identity (source, id, revision), so switching guidance or style can never reuse an older candidate; editing an entry bumps its revision.
+- Next-prompt generation resolves the selection before routing and refuses invalid entries instead of falling back to the default prompt.
+
+### Verification
+
+- Unit tests cover the byte-compatible default prompt, guidance/style overrides, variable pointers and the attached-content budget, fragment resolution, the cache key and mid-stream configuration changes (94 tests).
+- The Playwright suite covers the new settings selectors and the custom-entry manager; the full Docker matrix (`0.2.1-rc.3`, `0.2.1-rc.4`, `0.2.2-alpha.2`) passes.
+- The Docker matrix now pins the host Cordis/Schemastery stack per DSH version: `0.2.2-alpha.2` declares pre-release ranges that resolve to later alpha patches, which break agent-preset mounting. That is a host-install regression, not a plugin defect, so the matrix installs the versions the release was verified against.
+
 ## [1.3.8] - 2026-11-03
 
 Optimization in a brand-new session works again. Two separate defects stacked up: the request cursor and the model route.
