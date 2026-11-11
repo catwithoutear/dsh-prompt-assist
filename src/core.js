@@ -144,9 +144,8 @@ export function resolveFragment(fragments, kind, id) {
  */
 export function sessionOverride(config, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return undefined;
-  const overrides = readVolatile(config?.sessionOverrides);
-  if (!Array.isArray(overrides)) return undefined;
-  const own = overrides.find(row => row && row.sessionId === sessionId);
+  const rows = pruneSessionOverrides(readVolatile(config?.sessionOverrides));
+  const own = rows.find(row => row.sessionId === sessionId);
   return own && typeof own === 'object' ? own : undefined;
 }
 
@@ -157,8 +156,13 @@ export function sessionOverride(config, sessionId) {
  */
 export function pruneSessionOverrides(overrides, limit = SESSION_OVERRIDE_LIMIT) {
   if (!Array.isArray(overrides)) return [];
-  return [...overrides]
-    .filter(row => row && typeof row === 'object' && typeof row.sessionId === 'string' && row.sessionId !== '')
+  const newest = new Map();
+  for (const row of overrides) {
+    if (!row || typeof row !== 'object' || typeof row.sessionId !== 'string' || row.sessionId === '') continue;
+    const previous = newest.get(row.sessionId);
+    if (!previous || (Number(row.at) || 0) >= (Number(previous.at) || 0)) newest.set(row.sessionId, row);
+  }
+  return [...newest.values()]
     .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0))
     .slice(0, Math.max(0, limit));
 }
@@ -170,15 +174,17 @@ export function pruneSessionOverrides(overrides, limit = SESSION_OVERRIDE_LIMIT)
 export function withSessionOverride(overrides, sessionId, change = {}, now = Date.now()) {
   const list = Array.isArray(overrides) ? overrides : [];
   if (typeof sessionId !== 'string' || sessionId === '') return pruneSessionOverrides(list);
-  const current = list.find(row => row && row.sessionId === sessionId) ?? {};
+  const current = pruneSessionOverrides(list).find(row => row.sessionId === sessionId) ?? {};
   const entry = { ...current, sessionId };
   for (const axis of ['directionId', 'styleId']) {
     if (!Object.prototype.hasOwnProperty.call(change, axis)) continue;
-    if (change[axis]) entry[axis] = change[axis]; else delete entry[axis];
+    const value = change[axis];
+    if (typeof value === 'string' && value !== '') entry[axis] = value; else delete entry[axis];
   }
-  const rest = list.filter(row => !(row && row && row.sessionId === sessionId));
+  const rest = list.filter(row => !(row && row.sessionId === sessionId));
   if (entry.directionId === undefined && entry.styleId === undefined) return pruneSessionOverrides(rest);
-  return pruneSessionOverrides([...rest, { ...entry, at: now }]);
+  // Keep the fresh entry first so an equal `at` (clock skew) cannot prune it away.
+  return pruneSessionOverrides([{ ...entry, at: now }, ...rest]);
 }
 
 const configuredId = (value, fallback) =>

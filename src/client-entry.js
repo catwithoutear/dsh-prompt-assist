@@ -745,7 +745,9 @@ function makeClient(React) {
     );
     const [failed, setFailed] = React.useState(false);
     const queue = React.useRef(Promise.resolve());
-    if (!configForm || !config || config.status === 'unavailable' || !sessionId) return null;
+    // Only write once the settings form is hydrated; otherwise a write would
+    // replace the stored list with just this session's entry.
+    if (!configForm || !config || config.status !== 'ready' || config.value === undefined || !sessionId) return null;
     const value = config.value ?? {};
     const resolved = resolveSelection(value, sessionId);
     // A broken global selection is explained by the composer; the header stays quiet.
@@ -768,23 +770,28 @@ function makeClient(React) {
         setFailed(!ok);
       }, () => setFailed(true));
     };
-    const select = (kind, selected, globalId, label) => h('span', { className: 'dsh-pa-session-wrap' },
-      h('select', {
-        className: 'dsh-pa-session-select',
-        value: selected,
-        'aria-label': label,
-        title: label,
-        onChange: event => write(kind === 'style'
-          ? { styleId: event.target.value } : { directionId: event.target.value }),
-      },
-        h('option', { value: '' },
-          `${translate('sessionStrategy.inheritShort')} · ${fragmentLabel(value, kind, globalId, translate)}`),
-        optionRowsFor(value, kind, translate).map(row => h('option', { key: row.id, value: row.id }, row.label))));
+    const select = (kind, storedId, globalId, label) => {
+      const rows = optionRowsFor(value, kind, translate);
+      // A stored id that no longer resolves is shown as a disabled option so the
+      // control matches what is persisted and "Global" is a real change again.
+      const stale = storedId !== '' && !rows.some(row => row.id === storedId);
+      return h('span', { className: 'dsh-pa-session-wrap' },
+        h('select', {
+          className: 'dsh-pa-session-select',
+          value: storedId,
+          'aria-label': label,
+          title: label,
+          onChange: event => write(kind === 'style'
+            ? { styleId: event.target.value } : { directionId: event.target.value }),
+        },
+          h('option', { value: '' },
+            `${translate('sessionStrategy.inheritShort')} · ${fragmentLabel(value, kind, globalId, translate)}`),
+          stale && h('option', { value: storedId, disabled: true }, translate('sessionStrategy.stale')),
+          rows.map(row => h('option', { key: row.id, value: row.id }, row.label))));
+    };
     return h('div', { className: 'dsh-pa-session' },
-      select('direction', own?.directionId && !fallback.direction ? own.directionId : '',
-        globalDirection, translate('sessionStrategy.direction')),
-      select('style', own?.styleId && !fallback.style ? own.styleId : '',
-        globalStyle, translate('sessionStrategy.style')),
+      select('direction', own?.directionId ?? '', globalDirection, translate('sessionStrategy.direction')),
+      select('style', own?.styleId ?? '', globalStyle, translate('sessionStrategy.style')),
       (fallback.direction || fallback.style || failed) && h('span', {
         className: 'dsh-pa-session-warn',
         role: 'status',
@@ -1155,7 +1162,7 @@ function makeClient(React) {
         'settings.modelRow': '模型', 'settings.modelDefault': '使用提供商默认模型',
         'settings.modelHint': '默认跟随会话模型；选择其他模型后，下一句、续写与优化都用它生成。',
         'sessionStrategy.direction': '方向', 'sessionStrategy.style': '风格',
-        'sessionStrategy.inheritShort': '跟随全局',
+        'sessionStrategy.inheritShort': '跟随全局', 'sessionStrategy.stale': '（已失效）',
         'sessionStrategy.fallback': '本会话原来的选择已失效，正在使用全局默认。',
         'sessionStrategy.saveFailed': '保存失败，请重试。',
         'settings.group.next': '下一句预测',
@@ -1226,7 +1233,7 @@ function makeClient(React) {
         'settings.modelRow': 'Model', 'settings.modelDefault': 'Use the provider default',
         'settings.modelHint': 'Follows the session model by default; when another model is selected it also generates previews, continuations and optimizations.',
         'sessionStrategy.direction': 'Guidance', 'sessionStrategy.style': 'Style',
-        'sessionStrategy.inheritShort': 'Global',
+        'sessionStrategy.inheritShort': 'Global', 'sessionStrategy.stale': '(unavailable)',
         'sessionStrategy.fallback': 'The previous choice for this session is unavailable; the global default is in effect.',
         'sessionStrategy.saveFailed': 'Saving failed. Try again.',
         'settings.group.next': 'Next prompt',

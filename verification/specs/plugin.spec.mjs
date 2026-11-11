@@ -522,14 +522,21 @@ test('creates, edits, disables and deletes a custom entry', async () => {
 
 test('selects the next-prompt strategy for one session', async () => {
   const composer = await freshComposer();
-  const guidance = page.getByLabel('Guidance');
-  const style = page.getByLabel('Style');
+  const header = page.locator('.dsh-pa-session');
+  const guidance = header.getByLabel('Guidance');
+  const style = header.getByLabel('Style');
   await expect(guidance).toHaveValue('');
   await expect(guidance).toContainText('Global');
   await guidance.selectOption('challenge');
   await style.selectOption('precise');
   await expect(guidance).toHaveValue('challenge');
+  await expect(style).toHaveValue('precise');
   await screenshot('13-session-strategy.png');
+
+  // Switching the header selectors must not start a model request by itself.
+  const settled = (await llmStats()).byKind?.predict ?? 0;
+  await page.waitForTimeout(700);
+  expect((await llmStats()).byKind?.predict ?? 0).toBe(settled);
 
   await setComposerText(composer, CHAT_PROMPT);
   await page.keyboard.press('Enter');
@@ -541,19 +548,24 @@ test('selects the next-prompt strategy for one session', async () => {
 
   // The per-session choice survives a reload.
   await freshComposer();
-  await expect(page.getByLabel('Guidance')).toHaveValue('challenge');
-  await expect(page.getByLabel('Style')).toHaveValue('precise');
+  await expect(page.locator('.dsh-pa-session').getByLabel('Guidance')).toHaveValue('challenge');
+  await expect(page.locator('.dsh-pa-session').getByLabel('Style')).toHaveValue('precise');
 
-  // "Global" clears the override and the next suggestion returns to the default prompt.
-  await page.getByLabel('Guidance').selectOption('');
-  await page.getByLabel('Style').selectOption('');
-  await expect(page.getByLabel('Guidance')).toHaveValue('');
+  // "Global" clears both axes; the global style (precise, set earlier) stays.
+  const header2 = page.locator('.dsh-pa-session');
+  await header2.getByLabel('Guidance').selectOption('');
+  await header2.getByLabel('Style').selectOption('');
+  await expect(header2.getByLabel('Guidance')).toHaveValue('');
+  await expect(header2.getByLabel('Style')).toHaveValue('');
   const restored = await freshComposer();
   await setComposerText(restored, CHAT_PROMPT);
   await page.keyboard.press('Enter');
   await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
   await expect.poll(async () => (await llmStats()).lastPredictSystem ?? '', { timeout: 90_000 })
     .toContain('If the assistant asks a question');
+  const cleared = (await llmStats()).lastPredictSystem ?? '';
+  expect(cleared).not.toContain('Target: the one claim');
+  expect(cleared).toContain('Expression: name the boundary');
 });
 
 /** Optimization requests the deterministic stub has answered so far. */

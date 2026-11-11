@@ -192,6 +192,31 @@ test('session overrides are written per axis, cleared and capped', () => {
     'an empty session id never becomes an entry');
 });
 
+test('duplicate rows and non-string ids are normalised', () => {
+  const duplicated = [
+    { sessionId: 's1', directionId: 'action', at: 1 },
+    { sessionId: 's1', directionId: 'challenge', at: 2 },
+  ];
+  assert.equal(pruneSessionOverrides(duplicated).length, 1, 'one row per session survives');
+  const merged = withSessionOverride(duplicated, 's1', { styleId: 'precise' }, 3);
+  assert.deepEqual(merged, [{ sessionId: 's1', directionId: 'challenge', styleId: 'precise', at: 3 }],
+    'the newest duplicate wins and the merge keeps it');
+  assert.deepEqual(withSessionOverride([], 's1', { directionId: 42 }, 1), [],
+    'a non-string id clears the axis instead of being stored');
+});
+
+test('an equal timestamp cannot prune the entry that was just written', () => {
+  const full = [];
+  for (let index = 0; index < SESSION_OVERRIDE_LIMIT; index += 1) {
+    full.push({ sessionId: `s${index}`, directionId: 'challenge', at: 5 });
+  }
+  const next = withSessionOverride(full, 'fresh', { directionId: 'action' }, 5);
+  assert.equal(next.length, SESSION_OVERRIDE_LIMIT);
+  assert.equal(next[0].sessionId, 'fresh', 'the fresh entry sorts first on a tie');
+  assert.equal(next.find(row => row.sessionId === `s${SESSION_OVERRIDE_LIMIT - 1}`), undefined,
+    'the oldest row with the same timestamp is dropped instead');
+});
+
 test('oversized override lists keep the newest sessions', () => {
   const many = [];
   for (let index = 0; index < SESSION_OVERRIDE_LIMIT + 5; index += 1) {
