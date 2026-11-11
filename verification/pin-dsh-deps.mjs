@@ -26,9 +26,14 @@ if (!spec) {
   process.exit(2);
 }
 const pins = JSON.parse(spec);
-if (!pins || typeof pins !== 'object' || Array.isArray(pins) || Object.keys(pins).length === 0) {
-  console.error('pin map must be a non-empty object');
+if (!pins || typeof pins !== 'object' || Array.isArray(pins)) {
+  console.error('pin map must be an object');
   process.exit(2);
+}
+// An empty map is a valid "nothing to pin" answer (versions with stable ranges).
+if (Object.keys(pins).length === 0) {
+  console.log('no host packages to pin');
+  process.exit(0);
 }
 
 rmSync(WORK, { recursive: true, force: true });

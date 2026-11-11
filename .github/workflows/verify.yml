@@ -70,7 +70,7 @@ jobs:
               dsh: version,
               nodeImage: nodeImages[version]
                 || (version.startsWith("0.2.2-alpha.") ? "node:24-bookworm-slim" : defaultNodeImage),
-              pins: JSON.stringify(pins[version] || {}),
+              pins: pins[version] ? JSON.stringify(pins[version]) : "",
             }));
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify({ include })}\n`);
           '
