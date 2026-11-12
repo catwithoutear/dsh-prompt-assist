@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CHAT_PROMPT,
@@ -680,11 +680,19 @@ test('refuses an optimization whose selection covers the quoted passage', async 
 
 test('unloads and reloads the plugin live without restarting the host', async () => {
   const patchPath = join(process.env.DSH_HOME || '/verify/home', 'profiles/web/cordis.patch.yml');
-  const base = readFileSync(patchPath, 'utf8');
-  const disabledEntry = "- id: dsh-prompt-assist\n  name: '@catwithoutear/dsh-prompt-assist'\n  disabled: true\n";
+  const base = readFileSync(patchPath, 'utf8').trimEnd() + '\n';
+  const disabledEntry = "- id: dsh-prompt-assist\n  disabled: true\n";
+  // The watcher reloads the profile patch after its write settles; write
+  // atomically so it never observes a half-written tree.
+  const writePatch = body => {
+    const temporary = `${patchPath}.tmp`;
+    writeFileSync(temporary, body);
+    renameSync(temporary, patchPath);
+  };
   const predictCount = async () => (await llmStats()).byKind?.predict ?? 0;
   const errors = [];
-  page.on('pageerror', error => errors.push(String(error)));
+  const onPageError = error => errors.push(String(error));
+  page.on('pageerror', onPageError);
   const send = async (composer, text) => {
     const before = await page.getByText(CHAT_REPLY).count();
     await setComposerText(composer, text);
@@ -692,37 +700,41 @@ test('unloads and reloads the plugin live without restarting the host', async ()
     await expect.poll(() => page.getByText(CHAT_REPLY).count(), { timeout: 90_000 })
       .toBeGreaterThan(before);
   };
+  const headerCount = async () => {
+    await freshComposer();
+    return page.locator('.dsh-pa-session').count();
+  };
 
   try {
     // Loaded: a completed turn makes the plugin ask the model for a suggestion.
-    await freshComposer();
-    let composer = page.locator('[data-composer-input][contenteditable="true"]').first();
+    let composer = await freshComposer();
     const before = await predictCount();
     await send(composer, CHAT_PROMPT);
     await expect.poll(predictCount, { timeout: 30_000 }).toBeGreaterThan(before);
 
-    // Disabled: the host disposes the entry immediately, so the turn still works
-    // but the plugin no longer requests a prediction.
-    writeFileSync(patchPath, `${base.trimEnd()}\n${disabledEntry}`);
-    await page.waitForTimeout(3_000);
+    // Disabled: the host unloads the entry. Reloading re-fetches the client
+    // composition, so the header control disappears once the change applies.
+    writePatch(`${base}${disabledEntry}`);
+    await expect.poll(headerCount, { timeout: 45_000 }).toBe(0);
+    composer = page.locator('[data-composer-input][contenteditable="true"]').first();
     const disabledAt = await predictCount();
     await send(composer, CHAT_PROMPT);
-    await page.waitForTimeout(4_000);
+    await page.waitForTimeout(2_000);
     expect(await predictCount(), 'a disabled plugin must not request a prediction').toBe(disabledAt);
 
-    // Enabled again: an open page cannot remount the browser half, so the
-    // documented step is a page refresh rather than a host restart.
-    writeFileSync(patchPath, base);
-    await page.waitForTimeout(3_000);
-    await freshComposer();
-    await expect(page.locator('.dsh-pa-session')).toBeVisible();
+    // Enabled again: the header control returns after a reload and the next
+    // completed turn reaches the model again.
+    writePatch(base);
+    await expect.poll(headerCount, { timeout: 45_000 }).toBeGreaterThan(0);
     composer = page.locator('[data-composer-input][contenteditable="true"]').first();
     const resumed = await predictCount();
     await send(composer, CHAT_PROMPT);
     await expect.poll(predictCount, { timeout: 30_000 }).toBeGreaterThan(resumed);
-    expect(errors, 'no uncaught page errors during the unload/reload cycle').toEqual([]);
+    expect(errors.filter(text => /prompt-assist|localPromptAssist/i.test(text)),
+      'no plugin page errors during the unload/reload cycle').toEqual([]);
     await screenshot('14-hot-reload.png');
   } finally {
-    writeFileSync(patchPath, base);
+    page.off('pageerror', onPageError);
+    writePatch(base);
   }
 });

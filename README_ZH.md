@@ -36,7 +36,7 @@ https://github.com/catwithoutear/dsh-prompt-assist.git
 
 也可以通过插件管理器安装本地检出目录。包名为 `@catwithoutear/dsh-prompt-assist`，显示名称为**提示词预览与历史**。
 
-更新已安装版本时：执行 `npm run build`，然后在插件管理器中重新安装或应用源码。DSH 会即时卸载并重新加载插件条目：停用和启用不需要重启 desktop，升级也由插件管理器按同样方式应用（它会在需要后续步骤时给出提示，而不是默认要求重启）。之后刷新页面，让浏览器端（输入框、会话标题栏、设置页）加载新代码。只有升级 DSH 本体（宿主框架或其依赖）时才需要重启 desktop。从旧 `@local/dsh-prompt-assist` 升级时，先移除旧插件条目并安装 `@catwithoutear/dsh-prompt-assist`，等新包应用后再刷新页面。
+更新已安装版本时：执行 `npm run build`，然后在插件管理器中重新安装或应用源码。停用和启用插件不需要重启 DSH（Docker 矩阵验证的是 `dsh web` 宿主，桌面外壳未覆盖）。升级同样由插件管理器应用；如果它的结果显示替换安装包需要重启进程，就按该结果处理。之后刷新页面，让浏览器端（输入框、会话标题栏、设置页）加载新代码。从旧 `@local/dsh-prompt-assist` 升级时，先移除旧插件条目并安装 `@catwithoutear/dsh-prompt-assist`，等新包应用后再刷新页面。
 
 ## 使用
 
@@ -103,7 +103,7 @@ npm run verify:docker  # 对已验证的 DSH 版本执行 Docker + Playwright �
 
 `test/fixtures/published-1308.mjs` 保存 1.3.8 的提示词原文，两套测试都用它做独立断言，避免实现自己证明自己。
 
-测试覆盖纯逻辑、控制器与 Host 主路径；不覆盖插件的 `apply()` 注册、React 客户端组件、浏览器原生事件或实际布局几何，也不证明真实模型输出质量。`verification/` 中的 Docker 测试覆盖 web 端的核心流程（composer、下一句 overlay、续写、优化），使用确定性模型桩；不覆盖桌面外壳与真实模型行为。
+测试覆盖纯逻辑、控制器与 Host 主路径；不覆盖插件的 `apply()` 注册、React 客户端组件、浏览器原生事件或实际布局几何，也不证明真实模型输出质量。`verification/` 中的 Docker 测试覆盖 web 端的核心流程（composer、下一句 overlay、续写、优化，以及插件的实时卸载/重新加载），使用确定性模型桩；不覆盖桌面外壳与真实模型行为。
 
 ## 项目布局
 

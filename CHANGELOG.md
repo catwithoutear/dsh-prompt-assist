@@ -6,7 +6,7 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ### Changed
 
-- Plugin updates no longer require restarting DSH. Disabling, enabling or upgrading the plugin from the plugin manager applies to the Host immediately; refresh the page afterwards so the composer, session header and settings reload with the new code. A desktop restart is only needed for a DSH host upgrade. No action is required for the existing install beyond the usual reinstall/apply and refresh.
+- Disabling or enabling the plugin applies to the Host immediately, without a restart. After an upgrade the plugin manager reports whether the new package can be applied or needs a process restart; follow that result, then refresh the page so the composer, session header and settings load the new code. Verified on the web host: disabling stops predictions while turns keep working, and enabling plus a refresh restores them.
 
 ## [1.3.9] - 2026-11-11
 

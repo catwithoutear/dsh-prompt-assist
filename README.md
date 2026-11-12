@@ -36,7 +36,7 @@ https://github.com/catwithoutear/dsh-prompt-assist.git
 
 You can also install a local checkout through the plugin manager. The package name is `@catwithoutear/dsh-prompt-assist`; the display name is **Prompt Preview & History**.
 
-To update an existing install: rebuild with `npm run build`, then reinstall or re-apply the source in the plugin manager. The DSH Host unloads and reloads the plugin entry live: disabling and enabling take effect without restarting the desktop app, and the plugin manager applies an upgrade the same way (its result reports any follow-up step instead of asking for a restart by default). Refresh the page afterwards so the browser half (composer, session header, settings) reloads with the new code. A desktop restart is only needed when DSH itself (the host framework or its dependencies) is upgraded. When upgrading from the old `@local/dsh-prompt-assist` name, remove that plugin entry first and install `@catwithoutear/dsh-prompt-assist`; wait for the new package to apply before refreshing.
+To update an existing install: rebuild with `npm run build`, then reinstall or re-apply the source in the plugin manager. Disabling and enabling the plugin takes effect without restarting DSH (verified on the `dsh web` host in the Docker matrix; the desktop shell is not covered). An upgrade is applied by the plugin manager as well; when its result says the package replacement needs a process restart, follow that result. Refresh the page afterwards so the browser half (composer, session header, settings) reloads with the new code. When upgrading from the old `@local/dsh-prompt-assist` name, remove that plugin entry first and install `@catwithoutear/dsh-prompt-assist`; wait for the new package to apply before refreshing.
 
 ## Usage
 
@@ -103,7 +103,7 @@ The suite contains 101 tests in five files:
 
 `test/fixtures/published-1308.mjs` keeps the published 1.3.8 prompt so both suites assert against an independent copy instead of the implementation's own constant.
 
-The tests cover pure logic, controllers, and the main Host paths. They do not cover the plugin's `apply()` registration, the React client components, native browser events, or actual layout geometry, and they do not prove the quality of real model output. The Docker harness in `verification/` automates the core web flows (composer, next-prompt overlay, continuation, and optimization) against a deterministic model stub; it does not cover the desktop shell or real model behavior.
+The tests cover pure logic, controllers, and the main Host paths. They do not cover the plugin's `apply()` registration, the React client components, native browser events, or actual layout geometry, and they do not prove the quality of real model output. The Docker harness in `verification/` automates the core web flows (composer, next-prompt overlay, continuation, optimization, and live plugin unload/reload) against a deterministic model stub; it does not cover the desktop shell or real model behavior.
 
 ## Project layout
 
