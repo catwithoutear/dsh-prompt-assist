@@ -4,6 +4,10 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Disabling or enabling the plugin applies to the Host immediately, without a restart. After an upgrade the plugin manager reports whether the new package can be applied or needs a process restart; follow that result, then refresh the page so the composer, session header and settings load the new code. Verified on the web host: disabling stops predictions while turns keep working, and enabling plus a refresh restores them.
+
 ## [1.3.9] - 2026-11-11
 
 The next-prompt suggestion becomes configurable: pick how it reasons about the conversation, how it is worded, and let each session choose its own pair.
