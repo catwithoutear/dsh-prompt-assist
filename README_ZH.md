@@ -36,7 +36,7 @@ https://github.com/catwithoutear/dsh-prompt-assist.git
 
 也可以通过插件管理器安装本地检出目录。包名为 `@catwithoutear/dsh-prompt-assist`，显示名称为**提示词预览与历史**。
 
-更新已安装版本时：执行 `npm run build`，在插件管理器中重新安装或应用源码，Host 改动后重启 DSH，Client 改动后刷新页面。已加载的 Host 模块必须通过重启替换，仅刷新页面不足以加载新代码。从旧 `@local/dsh-prompt-assist` 升级时，先移除旧插件条目并安装 `@catwithoutear/dsh-prompt-assist`，确认新包已安装后再重启 DSH。
+更新已安装版本时：执行 `npm run build`，然后在插件管理器中重新安装或应用源码。DSH 会即时卸载并重新加载插件条目：停用和启用不需要重启 desktop，升级也由插件管理器按同样方式应用（它会在需要后续步骤时给出提示，而不是默认要求重启）。之后刷新页面，让浏览器端（输入框、会话标题栏、设置页）加载新代码。只有升级 DSH 本体（宿主框架或其依赖）时才需要重启 desktop。从旧 `@local/dsh-prompt-assist` 升级时，先移除旧插件条目并安装 `@catwithoutear/dsh-prompt-assist`，等新包应用后再刷新页面。
 
 ## 使用
 

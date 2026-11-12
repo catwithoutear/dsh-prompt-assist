@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CHAT_PROMPT,
@@ -676,4 +676,53 @@ test('refuses an optimization whose selection covers the quoted passage', async 
   await expect(page.getByRole('button', { name: /^(Apply|应用)$/ })).toHaveCount(0);
   expect(await optimizationRequests(), 'no optimize request for a quoted selection').toBe(before);
   await screenshot('11-quote-selection-refusal.png');
+});
+
+test('unloads and reloads the plugin live without restarting the host', async () => {
+  const patchPath = join(process.env.DSH_HOME || '/verify/home', 'profiles/web/cordis.patch.yml');
+  const base = readFileSync(patchPath, 'utf8');
+  const disabledEntry = "- id: dsh-prompt-assist\n  name: '@catwithoutear/dsh-prompt-assist'\n  disabled: true\n";
+  const predictCount = async () => (await llmStats()).byKind?.predict ?? 0;
+  const errors = [];
+  page.on('pageerror', error => errors.push(String(error)));
+  const send = async (composer, text) => {
+    const before = await page.getByText(CHAT_REPLY).count();
+    await setComposerText(composer, text);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.getByText(CHAT_REPLY).count(), { timeout: 90_000 })
+      .toBeGreaterThan(before);
+  };
+
+  try {
+    // Loaded: a completed turn makes the plugin ask the model for a suggestion.
+    await freshComposer();
+    let composer = page.locator('[data-composer-input][contenteditable="true"]').first();
+    const before = await predictCount();
+    await send(composer, CHAT_PROMPT);
+    await expect.poll(predictCount, { timeout: 30_000 }).toBeGreaterThan(before);
+
+    // Disabled: the host disposes the entry immediately, so the turn still works
+    // but the plugin no longer requests a prediction.
+    writeFileSync(patchPath, `${base.trimEnd()}\n${disabledEntry}`);
+    await page.waitForTimeout(3_000);
+    const disabledAt = await predictCount();
+    await send(composer, CHAT_PROMPT);
+    await page.waitForTimeout(4_000);
+    expect(await predictCount(), 'a disabled plugin must not request a prediction').toBe(disabledAt);
+
+    // Enabled again: an open page cannot remount the browser half, so the
+    // documented step is a page refresh rather than a host restart.
+    writeFileSync(patchPath, base);
+    await page.waitForTimeout(3_000);
+    await freshComposer();
+    await expect(page.locator('.dsh-pa-session')).toBeVisible();
+    composer = page.locator('[data-composer-input][contenteditable="true"]').first();
+    const resumed = await predictCount();
+    await send(composer, CHAT_PROMPT);
+    await expect.poll(predictCount, { timeout: 30_000 }).toBeGreaterThan(resumed);
+    expect(errors, 'no uncaught page errors during the unload/reload cycle').toEqual([]);
+    await screenshot('14-hot-reload.png');
+  } finally {
+    writeFileSync(patchPath, base);
+  }
 });

@@ -36,7 +36,7 @@ https://github.com/catwithoutear/dsh-prompt-assist.git
 
 You can also install a local checkout through the plugin manager. The package name is `@catwithoutear/dsh-prompt-assist`; the display name is **Prompt Preview & History**.
 
-To update an existing install: rebuild with `npm run build`, reinstall or re-apply the source in the plugin manager, restart DSH for Host changes, and refresh the page for client changes. Replacing an already loaded Host module requires a restart; refreshing the page alone is not enough. When upgrading from the old `@local/dsh-prompt-assist` name, remove that plugin entry first and install `@catwithoutear/dsh-prompt-assist`; do not restart DSH before the new package is installed.
+To update an existing install: rebuild with `npm run build`, then reinstall or re-apply the source in the plugin manager. The DSH Host unloads and reloads the plugin entry live: disabling and enabling take effect without restarting the desktop app, and the plugin manager applies an upgrade the same way (its result reports any follow-up step instead of asking for a restart by default). Refresh the page afterwards so the browser half (composer, session header, settings) reloads with the new code. A desktop restart is only needed when DSH itself (the host framework or its dependencies) is upgraded. When upgrading from the old `@local/dsh-prompt-assist` name, remove that plugin entry first and install `@catwithoutear/dsh-prompt-assist`; wait for the new package to apply before refreshing.
 
 ## Usage
 

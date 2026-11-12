@@ -4,6 +4,10 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Plugin updates no longer require restarting DSH. Disabling, enabling or upgrading the plugin from the plugin manager applies to the Host immediately; refresh the page afterwards so the composer, session header and settings reload with the new code. A desktop restart is only needed for a DSH host upgrade. No action is required for the existing install beyond the usual reinstall/apply and refresh.
+
 ## [1.3.9] - 2026-11-11
 
 The next-prompt suggestion becomes configurable: pick how it reasons about the conversation, how it is worded, and let each session choose its own pair.
