@@ -521,10 +521,16 @@ test('creates, edits, disables and deletes a custom entry', async () => {
 });
 
 test('selects the next-prompt strategy for one session', async () => {
+  const openView = async () => {
+    await page.getByRole('tab', { name: 'Prompt assist' }).click();
+    await expect(page.locator('.dsh-pa-view')).toBeVisible();
+  };
+  const chatTab = page.getByRole('tab', { name: 'Chat' });
   const composer = await freshComposer();
-  const header = page.locator('.dsh-pa-session');
-  const guidance = header.getByLabel('Guidance');
-  const style = header.getByLabel('Style');
+  await openView();
+  const view = page.locator('.dsh-pa-view');
+  const guidance = view.getByLabel('Guidance');
+  const style = view.getByLabel('Style');
   await expect(guidance).toHaveValue('');
   await expect(guidance).toContainText('Global');
   await guidance.selectOption('challenge');
@@ -533,11 +539,12 @@ test('selects the next-prompt strategy for one session', async () => {
   await expect(style).toHaveValue('precise');
   await screenshot('13-session-strategy.png');
 
-  // Switching the header selectors must not start a model request by itself.
+  // Switching the selectors must not start a model request by itself.
   const settled = (await llmStats()).byKind?.predict ?? 0;
   await page.waitForTimeout(700);
   expect((await llmStats()).byKind?.predict ?? 0).toBe(settled);
 
+  await chatTab.click();
   await setComposerText(composer, CHAT_PROMPT);
   await page.keyboard.press('Enter');
   await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
@@ -546,17 +553,19 @@ test('selects the next-prompt strategy for one session', async () => {
   const chosen = (await llmStats()).lastPredictSystem ?? '';
   expect(chosen).toContain('Expression: name the boundary');
 
-  // The per-session choice survives a reload.
+  // The per-session choice survives a reload; the view is not the default tab.
   await freshComposer();
-  await expect(page.locator('.dsh-pa-session').getByLabel('Guidance')).toHaveValue('challenge');
-  await expect(page.locator('.dsh-pa-session').getByLabel('Style')).toHaveValue('precise');
+  await openView();
+  const view2 = page.locator('.dsh-pa-view');
+  await expect(view2.getByLabel('Guidance')).toHaveValue('challenge');
+  await expect(view2.getByLabel('Style')).toHaveValue('precise');
 
   // "Global" clears both axes; the global style (precise, set earlier) stays.
-  const header2 = page.locator('.dsh-pa-session');
-  await header2.getByLabel('Guidance').selectOption('');
-  await header2.getByLabel('Style').selectOption('');
-  await expect(header2.getByLabel('Guidance')).toHaveValue('');
-  await expect(header2.getByLabel('Style')).toHaveValue('');
+  await view2.getByLabel('Guidance').selectOption('');
+  await view2.getByLabel('Style').selectOption('');
+  await expect(view2.getByLabel('Guidance')).toHaveValue('');
+  await expect(view2.getByLabel('Style')).toHaveValue('');
+  await chatTab.click();
   const restored = await freshComposer();
   await setComposerText(restored, CHAT_PROMPT);
   await page.keyboard.press('Enter');
@@ -700,9 +709,9 @@ test('unloads and reloads the plugin live without restarting the host', async ()
     await expect.poll(() => page.getByText(CHAT_REPLY).count(), { timeout: 90_000 })
       .toBeGreaterThan(before);
   };
-  const headerCount = async () => {
+  const tabCount = async () => {
     await freshComposer();
-    return page.locator('.dsh-pa-session').count();
+    return page.getByRole('tab', { name: 'Prompt assist' }).count();
   };
 
   try {
@@ -715,7 +724,7 @@ test('unloads and reloads the plugin live without restarting the host', async ()
     // Disabled: the host unloads the entry. Reloading re-fetches the client
     // composition, so the header control disappears once the change applies.
     writePatch(`${base}${disabledEntry}`);
-    await expect.poll(headerCount, { timeout: 45_000 }).toBe(0);
+    await expect.poll(tabCount, { timeout: 45_000 }).toBe(0);
     composer = page.locator('[data-composer-input][contenteditable="true"]').first();
     const disabledAt = await predictCount();
     await send(composer, CHAT_PROMPT);
@@ -725,7 +734,7 @@ test('unloads and reloads the plugin live without restarting the host', async ()
     // Enabled again: the header control returns after a reload and the next
     // completed turn reaches the model again.
     writePatch(base);
-    await expect.poll(headerCount, { timeout: 45_000 }).toBeGreaterThan(0);
+    await expect.poll(tabCount, { timeout: 45_000 }).toBeGreaterThan(0);
     composer = page.locator('[data-composer-input][contenteditable="true"]').first();
     const resumed = await predictCount();
     await send(composer, CHAT_PROMPT);
