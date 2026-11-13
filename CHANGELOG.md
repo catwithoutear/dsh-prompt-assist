@@ -15,7 +15,7 @@ The per-session prompt strategy now lives in its own conversation tab, and plugi
 
 ### Upgrade note
 
-Apply the new package and refresh the page: the tab replaces the header selectors in the browser half, and the Host half is unchanged from 1.3.9. No DSH restart is needed for this update; an upgrade whose package replacement the plugin manager reports as restart-required still follows that result.
+Apply the new package and refresh the page. After the update the guidance/style dropdowns disappear from the session header; they now live in the **Prompt assist** tab, in the same row as Chat and Trajectory. The tab replaces those selectors in the browser half, and the Host half is unchanged from 1.3.9. No DSH restart is needed for this update; an upgrade whose package replacement the plugin manager reports as restart-required still follows that result.
 
 Versioning: this is a patch release because it reorganizes the existing UI and documents live reloading; no `Config` schema, RPC, prompt contract or supported DSH range changed.
 
