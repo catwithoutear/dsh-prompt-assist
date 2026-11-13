@@ -99,7 +99,7 @@ capability (DSH gained it in 0.2.2-alpha.2), so these two cases probe for the
   screenshot as evidence.
 - Disabling the plugin entry in the profile patch takes effect live: an open page
   stops predicting while normal turns keep working. Enabling it again and
-  refreshing the page restores the header selectors and predictions, so a plugin
+  refreshing the page restores the Prompt assist tab and predictions, so a plugin
   update does not require restarting the host.
 
 ## What it does not prove

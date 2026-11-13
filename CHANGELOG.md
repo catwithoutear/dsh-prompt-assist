@@ -6,7 +6,8 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ### Changed
 
-- Disabling or enabling the plugin applies to the Host immediately, without a restart. After an upgrade the plugin manager reports whether the new package can be applied or needs a process restart; follow that result, then refresh the page so the composer, session header and settings load the new code. Verified on the web host: disabling stops predictions while turns keep working, and enabling plus a refresh restores them.
+- **Per-session strategy moved into a Prompt assist view.** The two selectors left the session header and now live in a dedicated **Prompt assist** tab in the conversation view row, next to Chat, Trajectory and the other session views. The tab also carries the automatic-prediction switch and the optimization strategy (both global settings); the auxiliary model and custom entries stay under Settings → Prompt assist. The session header no longer shows the selectors, so a page refresh after an update is enough to see the new layout.
+- Disabling or enabling the plugin applies to the Host immediately, without a restart. After an upgrade the plugin manager reports whether the new package can be applied or needs a process restart; follow that result, then refresh the page so the composer, Prompt assist tab and settings load the new code. Verified on the web host: disabling stops predictions while turns keep working, and enabling plus a refresh restores them.
 
 ## [1.3.9] - 2026-11-11
 
