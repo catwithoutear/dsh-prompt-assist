@@ -521,16 +521,17 @@ test('creates, edits, disables and deletes a custom entry', async () => {
 });
 
 test('selects the next-prompt strategy for one session', async () => {
+  const promptAssistTab = page.getByRole('tab', { name: /^(Prompt assist|提示助手)$/ });
+  const chatTab = page.getByRole('tab', { name: /^(Chat|对话)$/ });
   const openView = async () => {
-    await page.getByRole('tab', { name: 'Prompt assist' }).click();
+    await promptAssistTab.click();
     await expect(page.locator('.dsh-pa-view')).toBeVisible();
   };
-  const chatTab = page.getByRole('tab', { name: 'Chat' });
   const composer = await freshComposer();
   await openView();
   const view = page.locator('.dsh-pa-view');
-  const guidance = view.getByLabel('Guidance');
-  const style = view.getByLabel('Style');
+  const guidance = view.getByLabel(/^(Guidance|方向)$/);
+  const style = view.getByLabel(/^(Style|风格)$/);
   await expect(guidance).toHaveValue('');
   await expect(guidance).toContainText('Global');
   await guidance.selectOption('challenge');
@@ -544,9 +545,13 @@ test('selects the next-prompt strategy for one session', async () => {
   await page.waitForTimeout(700);
   expect((await llmStats()).byKind?.predict ?? 0).toBe(settled);
 
-  await chatTab.click();
+  // The composer stays usable while this view is active; the turn completes and
+  // the prediction reaches the model. The transcript is only visible on Chat.
   await setComposerText(composer, CHAT_PROMPT);
   await page.keyboard.press('Enter');
+  await expect.poll(async () => (await llmStats()).byKind?.predict ?? 0, { timeout: 90_000 })
+    .toBeGreaterThan(settled);
+  await chatTab.click();
   await expect(page.getByText(CHAT_REPLY).first()).toBeVisible({ timeout: 90_000 });
   await expect.poll(async () => (await llmStats()).lastPredictSystem ?? '', { timeout: 90_000 })
     .toContain('Target: the one claim');
@@ -557,14 +562,32 @@ test('selects the next-prompt strategy for one session', async () => {
   await freshComposer();
   await openView();
   const view2 = page.locator('.dsh-pa-view');
-  await expect(view2.getByLabel('Guidance')).toHaveValue('challenge');
-  await expect(view2.getByLabel('Style')).toHaveValue('precise');
+  await expect(view2.getByLabel(/^(Guidance|方向)$/)).toHaveValue('challenge');
+  await expect(view2.getByLabel(/^(Style|风格)$/)).toHaveValue('precise');
 
   // "Global" clears both axes; the global style (precise, set earlier) stays.
-  await view2.getByLabel('Guidance').selectOption('');
-  await view2.getByLabel('Style').selectOption('');
-  await expect(view2.getByLabel('Guidance')).toHaveValue('');
-  await expect(view2.getByLabel('Style')).toHaveValue('');
+  await view2.getByLabel(/^(Guidance|方向)$/).selectOption('');
+  await view2.getByLabel(/^(Style|风格)$/).selectOption('');
+  await expect(view2.getByLabel(/^(Guidance|方向)$/)).toHaveValue('');
+  await expect(view2.getByLabel(/^(Style|风格)$/)).toHaveValue('');
+
+  // The two global controls on the same page are editable and persist.
+  const autoSwitch = view2.getByRole('switch', { name: /^(Automatic prompt prediction|自动提示词预测)$/ });
+  const strategy = view2.getByLabel(/^(Direction|优化方向)$/);
+  await expect(autoSwitch).toHaveAttribute('aria-checked', 'true');
+  await autoSwitch.click();
+  await expect(autoSwitch).toHaveAttribute('aria-checked', 'false');
+  await strategy.selectOption('clarify');
+  await freshComposer();
+  await openView();
+  const view3 = page.locator('.dsh-pa-view');
+  await expect(view3.getByRole('switch', { name: /^(Automatic prompt prediction|自动提示词预测)$/ }))
+    .toHaveAttribute('aria-checked', 'false');
+  await expect(view3.getByLabel(/^(Direction|优化方向)$/)).toHaveValue('clarify');
+  await view3.getByRole('switch', { name: /^(Automatic prompt prediction|自动提示词预测)$/ }).click();
+  await view3.getByLabel(/^(Direction|优化方向)$/).selectOption('expand');
+
+  // Clearing both axes returns the next suggestion to the global default.
   await chatTab.click();
   const restored = await freshComposer();
   await setComposerText(restored, CHAT_PROMPT);
@@ -711,12 +734,16 @@ test('unloads and reloads the plugin live without restarting the host', async ()
   };
   const tabCount = async () => {
     await freshComposer();
-    return page.getByRole('tab', { name: 'Prompt assist' }).count();
+    const chat = page.getByRole('tab', { name: /^(Chat|对话)$/ });
+    if (await chat.count()) await chat.click();
+    return page.getByRole('tab', { name: /^(Prompt assist|提示助手)$/ }).count();
   };
 
   try {
     // Loaded: a completed turn makes the plugin ask the model for a suggestion.
     let composer = await freshComposer();
+    const chat = page.getByRole('tab', { name: /^(Chat|对话)$/ });
+    if (await chat.count()) await chat.click();
     const before = await predictCount();
     await send(composer, CHAT_PROMPT);
     await expect.poll(predictCount, { timeout: 30_000 }).toBeGreaterThan(before);
