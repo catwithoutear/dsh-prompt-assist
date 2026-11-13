@@ -16,7 +16,7 @@ A release is consistent only when these files agree:
 | `CHANGELOG.md` | the release note; `[Unreleased]` becomes the new version section |
 | `package.json` `engines.dsh` + `verification/dsh-versions.json` | declared and verified DSH support |
 | `README.md` / `README_ZH.md` compatibility lines | must state the same DSH range and verified versions |
-| git tag `v<version>` | annotated tag on the release merge commit; triggers publishing |
+| git tag `v<version>` | annotated tag on the release merge commit; its message summarizes the new features, fixed bugs and user-experience changes; triggers publishing |
 
 ## Versioning
 
@@ -69,9 +69,28 @@ before the final version is published.
 2. Bump `package.json` and `package-lock.json`; move the planned entries from `[Unreleased]` into the new section.
 3. Run `npm test`, `npm run build`, `npm run check`, `npm run verify:versions`, and confirm `npm pack --dry-run --ignore-scripts` ships only the whitelisted files.
 4. Open the release PR; CI runs the full DSH matrix. Merge only when every cell is green.
-5. `git pull --ff-only` so the local `main` is the release merge commit, then create the annotated tag **on that commit**: `git tag -a v<version> -m "Release v<version>"` and push the tag.
+5. `git pull --ff-only` so the local `main` is the release merge commit, then create the annotated tag **on that commit** with a message that carries the release summary (new features, fixed bugs, user-experience changes; use the template below), and push the tag. Do not move or retag a version that is already published.
 6. The `Publish to npm` workflow publishes with dist-tag `next` for a version containing `-`, and `latest` otherwise. Never point `latest` at a pre-release.
 7. Report back the npm `dist-tags` output, the exact shasum and the tag target commit.
+
+## Tag Message
+
+The annotated tag is part of the release note, not just a pointer. Its message repeats the three lists from the release PR, in English, so `git tag -n` and the GitHub tag page answer "what shipped":
+
+```text
+Release v<version>
+
+New features:
+- ...
+
+Fixed bugs:
+- ...
+
+UX changes:
+- ...
+```
+
+Write "none" for an empty section. Keep each line short and user-facing; do not paste the whole changelog. A tag that says only `Release v<version>` is incomplete.
 
 ## Final Release Flow
 
