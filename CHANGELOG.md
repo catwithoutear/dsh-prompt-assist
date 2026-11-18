@@ -4,6 +4,24 @@ All notable changes to this plugin are documented here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-11-18
+
+The plugin no longer pins its own copy of the DSH typert-protocol package, so the running DSH supplies the matching protocol and the Host half keeps activating on DSH builds released after the protocol gained a new API.
+
+### Fixed
+
+- **The Host half failed to activate on DSH 0.2.2-rc.3 with `cannot get property "root" without inject`.** The plugin declared `@deepseek-ai/dsh-typert-protocol` as a regular dependency, so a profile install put that package into `node_modules` and every plugin bound to it. Desktop builds from current DSH master moved the root-context accessor to the `Context.root` symbol, while the npm copy at the same version number still read `ctx.root`; constructing the settled Remote service then threw and the whole Host half stayed inactive. Affected versions: 1.3.2 through 1.3.10.
+
+### Changed
+
+- `@deepseek-ai/dsh-typert-protocol` is now a peer dependency, so the Host supplies the copy that matches its own runtime and the profile no longer installs a second one that can shadow it. This repository still gets the package through `devDependencies`; no source or `Config` change.
+
+### Upgrade note
+
+After updating the package, remove a leftover `@deepseek-ai/dsh-typert-protocol` entry from the profile's own dependencies (and any local pnpm patch registered for it), run `pnpm install` in the profile and restart DSH. Without that cleanup the stale copy stays in `node_modules` and keeps shadowing the runtime's protocol; refreshing the page is not enough because the Host half resolves the package at startup.
+
+Versioning: patch — the `Config` schema, RPC contract, prompt bytes and supported DSH range are unchanged; only the dependency declaration changed.
+
 ## [1.3.10] - 2026-11-13
 
 The per-session prompt strategy now lives in its own conversation tab, and plugin updates no longer ask for a host restart.
